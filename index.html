@@ -352,7 +352,7 @@
 
       <section class="lookup-panel" id="lookupPanel" hidden aria-labelledby="lookupTitle">
         <div class="lookup-head">
-          <div><div class="eyebrow">S0 configuration rules</div><h2 id="lookupTitle">按 gacha_id 查找配置</h2><p>匹配三份 gacha 主表；替换后生成 S0 主表与图片配置。若类型为 normal，同时生成商品信息配置；若类型为 stepup，同时生成步骤池及步骤文案配置。</p></div>
+          <div><div class="eyebrow">S0 configuration rules</div><h2 id="lookupTitle">按 gacha_id 查找配置</h2><p>匹配三份 gacha 主表；替换后生成 S0 主表与图片配置。normal 类型同时生成 normal、product info 与 lot；stepup 类型同时生成 stepup、appeal text 与 product info。</p></div>
           <span class="rule-badge">3 FILE MATCH · S0 APPEND</span>
         </div>
         <div class="lookup-form">
@@ -381,7 +381,7 @@
             <div class="field"><label for="replacementIdInput">新的 gacha_id</label><input id="replacementIdInput" type="text" inputmode="numeric" autocomplete="off" placeholder="输入新的 gacha_id"><small>将复制所选来源行，只修改 ID，并追加到对应 S0 TSV 底部。</small></div>
             <button class="btn primary" id="replaceIdBtn" type="button">替换并生成</button>
           </div>
-          <div class="result-actions"><button class="btn" id="downloadResultsBtn" type="button" disabled>下载新的 S0 m_gacha.tsv</button><button class="btn" id="downloadAppealBtn" type="button" disabled>下载新的 S0 m_gacha_appeal_image.tsv</button><button class="btn" id="downloadProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_product_info.tsv</button><button class="btn" id="downloadStepupBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup.tsv</button><button class="btn" id="downloadStepupTextBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_appeal_text.tsv</button></div>
+          <div class="result-actions"><button class="btn" id="downloadResultsBtn" type="button" disabled>下载新的 S0 m_gacha.tsv</button><button class="btn" id="downloadAppealBtn" type="button" disabled>下载新的 S0 m_gacha_appeal_image.tsv</button><button class="btn" id="downloadProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_product_info.tsv</button><button class="btn" id="downloadNormalBtn" type="button" hidden disabled>下载新的 S0 m_gacha_normal.tsv</button><button class="btn" id="downloadLotBtn" type="button" hidden disabled>下载新的 S0 m_gacha_lot.tsv</button><button class="btn" id="downloadStepupBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup.tsv</button><button class="btn" id="downloadStepupTextBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_appeal_text.tsv</button><button class="btn" id="downloadStepupProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_product_info.tsv</button></div>
         </div>
       </section>
     </main>
@@ -424,8 +424,11 @@
     let generatedS0Text = '';
     let generatedS0AppealText = '';
     let generatedS0ProductInfoText = '';
+    let generatedS0NormalText = '';
+    let generatedS0LotText = '';
     let generatedS0StepupText = '';
     let generatedS0StepupAppealText = '';
+    let generatedS0StepupProductInfoText = '';
     let generatedS0Id = '';
     const resultTextFields = new Set(['name','appeal_text','copyright_text','feature_players_warning','_note']);
     const resultLongFields = new Set(['banner_asset_name','banner_logo_asset_name','background_asset_name','logo_asset_name','appeal_asset_name','pre_banner_asset_name','pre_banner_logo_asset_name']);
@@ -648,17 +651,26 @@
       generatedS0Text = '';
       generatedS0AppealText = '';
       generatedS0ProductInfoText = '';
+      generatedS0NormalText = '';
+      generatedS0LotText = '';
       generatedS0StepupText = '';
       generatedS0StepupAppealText = '';
+      generatedS0StepupProductInfoText = '';
       generatedS0Id = '';
       el('downloadResultsBtn').disabled = true;
       el('downloadAppealBtn').disabled = true;
       el('downloadProductInfoBtn').hidden = true;
       el('downloadProductInfoBtn').disabled = true;
+      el('downloadNormalBtn').hidden = true;
+      el('downloadNormalBtn').disabled = true;
+      el('downloadLotBtn').hidden = true;
+      el('downloadLotBtn').disabled = true;
       el('downloadStepupBtn').hidden = true;
       el('downloadStepupBtn').disabled = true;
       el('downloadStepupTextBtn').hidden = true;
       el('downloadStepupTextBtn').disabled = true;
+      el('downloadStepupProductInfoBtn').hidden = true;
+      el('downloadStepupProductInfoBtn').disabled = true;
       el('lookupResults').classList.remove('visible');
       el('resultBody').innerHTML = '';
       el('resultHead').innerHTML = '';
@@ -735,10 +747,16 @@
       el('downloadAppealBtn').disabled = true;
       el('downloadProductInfoBtn').hidden = true;
       el('downloadProductInfoBtn').disabled = true;
+      el('downloadNormalBtn').hidden = true;
+      el('downloadNormalBtn').disabled = true;
+      el('downloadLotBtn').hidden = true;
+      el('downloadLotBtn').disabled = true;
       el('downloadStepupBtn').hidden = true;
       el('downloadStepupBtn').disabled = true;
       el('downloadStepupTextBtn').hidden = true;
       el('downloadStepupTextBtn').disabled = true;
+      el('downloadStepupProductInfoBtn').hidden = true;
+      el('downloadStepupProductInfoBtn').disabled = true;
       renderResultTable();
       el('replacePanel').hidden = false;
       el('lookupResults').classList.add('visible');
@@ -793,8 +811,22 @@
       const functionType = String(selected.function_type ?? '').trim().toLowerCase();
       const isNormal = functionType === 'normal';
       const isStepup = functionType === 'stepup';
+      let normalMatches = [];
       let productInfoMatches = [];
+      let lotRowsToAppend = [];
       if(isNormal){
+        const normalSources = [
+          {file:'m_gacha_normal.tsv', parsed:parsedFiles.get('m_gacha_normal.tsv')},
+          {file:'m_gacha_normal.generated.tsv', parsed:parsedFiles.get('m_gacha_normal.generated.tsv')},
+          {file:'S0 / m_gacha_normal.tsv', parsed:otherParsedFiles.get('other:m_gacha_normal.tsv')}
+        ];
+        normalMatches = normalSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        const s0NormalParsed = otherParsedFiles.get('other:m_gacha_normal.tsv');
+        const normalRowsToAppend = normalMatches.map(sourceRow => Object.fromEntries(
+          s0NormalParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+        ));
+        generatedS0NormalText = appendRowsToTsv(otherState.get('other:m_gacha_normal.tsv')?.text ?? '', s0NormalParsed.headers, normalRowsToAppend);
+
         const productInfoSources = [
           {file:'m_gacha_product_info.tsv', parsed:parsedFiles.get('m_gacha_product_info.tsv')},
           {file:'m_gacha_product_info.generated.tsv', parsed:parsedFiles.get('m_gacha_product_info.generated.tsv')},
@@ -806,12 +838,29 @@
           s0ProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
         ));
         generatedS0ProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_product_info.tsv')?.text ?? '', s0ProductInfoParsed.headers, productInfoRowsToAppend);
+
+        const lotIds = [...new Set(normalRowsToAppend.map(row => String(row.lot_id ?? '')).filter(Boolean))];
+        const s0LotParsed = otherParsedFiles.get('other:m_gacha_lot.tsv');
+        const existingS0LotIds = new Set(s0LotParsed.rows.map(row => String(row.id ?? '')));
+        const missingLotIds = lotIds.filter(lotId => !existingS0LotIds.has(lotId));
+        const jpLotSources = [
+          parsedFiles.get('m_gacha_lot.tsv'),
+          parsedFiles.get('m_gacha_lot.generated.tsv')
+        ];
+        const sourceLotRows = jpLotSources.flatMap(parsed => parsed.rows.filter(row => missingLotIds.includes(String(row.id ?? ''))));
+        lotRowsToAppend = sourceLotRows.map(sourceRow => Object.fromEntries(
+          s0LotParsed.headers.map(header => [header, sourceRow[header] ?? ''])
+        ));
+        generatedS0LotText = appendRowsToTsv(otherState.get('other:m_gacha_lot.tsv')?.text ?? '', s0LotParsed.headers, lotRowsToAppend);
       } else {
+        generatedS0NormalText = '';
         generatedS0ProductInfoText = '';
+        generatedS0LotText = '';
       }
 
       let stepupMatches = [];
       let stepupAppealMatches = [];
+      let stepupProductInfoMatches = [];
       if(isStepup){
         const stepupSources = [
           {file:'m_gacha_stepup.tsv', parsed:parsedFiles.get('m_gacha_stepup.tsv')},
@@ -836,9 +885,22 @@
           s0StepupAppealParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
         ));
         generatedS0StepupAppealText = appendRowsToTsv(otherState.get('other:m_gacha_stepup_appeal_text.tsv')?.text ?? '', s0StepupAppealParsed.headers, stepupAppealRowsToAppend);
+
+        const stepupProductInfoSources = [
+          {file:'m_gacha_stepup_product_info.tsv', parsed:parsedFiles.get('m_gacha_stepup_product_info.tsv')},
+          {file:'m_gacha_stepup_product_info.generated.tsv', parsed:parsedFiles.get('m_gacha_stepup_product_info.generated.tsv')},
+          {file:'S0 / m_gacha_stepup_product_info.tsv', parsed:otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv')}
+        ];
+        stepupProductInfoMatches = stepupProductInfoSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        const s0StepupProductInfoParsed = otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv');
+        const stepupProductInfoRowsToAppend = stepupProductInfoMatches.map(sourceRow => Object.fromEntries(
+          s0StepupProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+        ));
+        generatedS0StepupProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_stepup_product_info.tsv')?.text ?? '', s0StepupProductInfoParsed.headers, stepupProductInfoRowsToAppend);
       } else {
         generatedS0StepupText = '';
         generatedS0StepupAppealText = '';
+        generatedS0StepupProductInfoText = '';
       }
       generatedS0Id = replacementId;
 
@@ -847,19 +909,25 @@
       renderResultTable();
       el('resultSummary').querySelector('.summary-title strong').textContent = `gacha_id ${activeGatchId} → ${replacementId} · S0 新增行预览`;
       el('lookupReady').className = 'lookup-ready';
-      const productInfoMessage = isNormal ? `；product info ${productInfoMatches.length} 行` : '';
-      const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行` : '';
-      el('lookupReady').textContent = `已追加 m_gacha 1 行与 appeal image ${appealMatches.length} 行${productInfoMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
+      const normalMessage = isNormal ? `；normal ${normalMatches.length} 行；product info ${productInfoMatches.length} 行；lot 新增 ${lotRowsToAppend.length} 行` : '';
+      const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行；stepup product info ${stepupProductInfoMatches.length} 行` : '';
+      el('lookupReady').textContent = `已追加 m_gacha 1 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
       el('replacementIdInput').value = '';
       el('downloadResultsBtn').disabled = false;
       el('downloadAppealBtn').disabled = false;
       el('downloadProductInfoBtn').hidden = !isNormal;
       el('downloadProductInfoBtn').disabled = !isNormal;
+      el('downloadNormalBtn').hidden = !isNormal;
+      el('downloadNormalBtn').disabled = !isNormal;
+      el('downloadLotBtn').hidden = !isNormal;
+      el('downloadLotBtn').disabled = !isNormal;
       el('downloadStepupBtn').hidden = !isStepup;
       el('downloadStepupBtn').disabled = !isStepup;
       el('downloadStepupTextBtn').hidden = !isStepup;
       el('downloadStepupTextBtn').disabled = !isStepup;
-      const generatedFileCount = 2 + (isNormal ? 1 : 0) + (isStepup ? 2 : 0);
+      el('downloadStepupProductInfoBtn').hidden = !isStepup;
+      el('downloadStepupProductInfoBtn').disabled = !isStepup;
+      const generatedFileCount = 2 + (isNormal ? 3 : 0) + (isStepup ? 3 : 0);
       showToast(`已生成 ${generatedFileCount} 个新的 S0 TSV 文件`);
     }
 
@@ -898,12 +966,24 @@
       downloadTsv(generatedS0ProductInfoText, 'm_gacha_product_info.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_product_info.tsv`);
     }
 
+    function downloadNormalTsv(){
+      downloadTsv(generatedS0NormalText, 'm_gacha_normal.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_normal.tsv`);
+    }
+
+    function downloadLotTsv(){
+      downloadTsv(generatedS0LotText, 'm_gacha_lot.tsv', `已下载 normal 配置所需的 m_gacha_lot.tsv`);
+    }
+
     function downloadStepupTsv(){
       downloadTsv(generatedS0StepupText, 'm_gacha_stepup.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_stepup.tsv`);
     }
 
     function downloadStepupAppealTsv(){
       downloadTsv(generatedS0StepupAppealText, 'm_gacha_stepup_appeal_text.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_stepup_appeal_text.tsv`);
+    }
+
+    function downloadStepupProductInfoTsv(){
+      downloadTsv(generatedS0StepupProductInfoText, 'm_gacha_stepup_product_info.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_stepup_product_info.tsv`);
     }
 
     el('batchInput').addEventListener('change', async e => {
@@ -952,8 +1032,11 @@
     el('downloadResultsBtn').addEventListener('click', downloadCollectedTsv);
     el('downloadAppealBtn').addEventListener('click', downloadAppealTsv);
     el('downloadProductInfoBtn').addEventListener('click', downloadProductInfoTsv);
+    el('downloadNormalBtn').addEventListener('click', downloadNormalTsv);
+    el('downloadLotBtn').addEventListener('click', downloadLotTsv);
     el('downloadStepupBtn').addEventListener('click', downloadStepupTsv);
     el('downloadStepupTextBtn').addEventListener('click', downloadStepupAppealTsv);
+    el('downloadStepupProductInfoBtn').addEventListener('click', downloadStepupProductInfoTsv);
 
     renderCards(); updateProgress(); updateLookupState();
   </script>
