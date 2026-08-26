@@ -429,6 +429,7 @@
     let resultHeaders = [];
     let activeGatchId = '';
     let activeCharacterType = '';
+    let activePlayerFunctionType = '';
     let activePreferredSourceKey = '';
     let generatedS0Text = '';
     let generatedS0AppealText = '';
@@ -658,6 +659,7 @@
       resultHeaders = [];
       activeGatchId = '';
       activeCharacterType = '';
+      activePlayerFunctionType = '';
       activePreferredSourceKey = '';
       generatedS0Text = '';
       generatedS0AppealText = '';
@@ -693,13 +695,16 @@
       playerType.className = 'player-type';
     }
 
-    function showCharacterType(characterType){
+    function showCharacterType(characterType, functionType=''){
       const playerType = el('playerType');
+      const functionLabel = functionType === 'stepup'
+        ? 'Stepup Player'
+        : functionType === 'normal' ? 'Normal Player' : '';
       if(characterType === 'reissue'){
-        playerType.textContent = '复刻角色';
+        playerType.textContent = ['复刻角色', functionLabel].filter(Boolean).join(' · ');
         playerType.className = 'player-type visible reissue';
       } else if(characterType === 'new'){
-        playerType.textContent = '新角色';
+        playerType.textContent = ['新角色', functionLabel].filter(Boolean).join(' · ');
         playerType.className = 'player-type visible new-character';
       } else {
         playerType.textContent = '';
@@ -739,7 +744,9 @@
       activePreferredSourceKey = s0Matches.length
         ? 's0'
         : (matches.some(row => row.source_key === 'jp-original') ? 'jp-original' : 'jp-generated');
-      showCharacterType(activeCharacterType);
+      const characterReferenceRow = matches.find(row => row.source_key === activePreferredSourceKey) ?? matches[0];
+      activePlayerFunctionType = String(characterReferenceRow.function_type ?? '').trim().toLowerCase();
+      showCharacterType(activeCharacterType, activePlayerFunctionType);
       const sourceHeaders = [...new Set(sources.flatMap(source => source.parsed.headers))];
       resultHeaders = ['source_file','source_type', ...sourceHeaders];
       collectedRows = matches;
@@ -903,6 +910,7 @@
       let stepupMatches = [];
       let stepupAppealMatches = [];
       let stepupProductInfoMatches = [];
+      let stepupLotRowsToAppend = [];
       if(isStepup){
         const stepupSources = [
           {file:'m_gacha_stepup.tsv', parsed:parsedFiles.get('m_gacha_stepup.tsv')},
@@ -939,6 +947,22 @@
           s0StepupProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
         ));
         generatedS0StepupProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_stepup_product_info.tsv')?.text ?? '', s0StepupProductInfoParsed.headers, stepupProductInfoRowsToAppend);
+
+        const stepupLotIds = [...new Set(stepupProductInfoRowsToAppend.flatMap(row => [row.lot_id, row.assurance_lot_id])
+          .map(value => String(value ?? '').trim())
+          .filter(value => value && value.toLowerCase() !== 'null'))];
+        const s0LotParsed = otherParsedFiles.get('other:m_gacha_lot.tsv');
+        const existingS0LotIds = new Set(s0LotParsed.rows.map(row => String(row.id ?? '')));
+        const missingStepupLotIds = stepupLotIds.filter(lotId => !existingS0LotIds.has(lotId));
+        const jpLotSources = [
+          {file:'m_gacha_lot.tsv', parsed:parsedFiles.get('m_gacha_lot.tsv')},
+          {file:'m_gacha_lot.generated.tsv', parsed:parsedFiles.get('m_gacha_lot.generated.tsv')}
+        ];
+        const stepupSourceLotRows = missingStepupLotIds.flatMap(lotId => rowsByCopyPriority(jpLotSources, 'id', lotId));
+        stepupLotRowsToAppend = stepupSourceLotRows.map(sourceRow => Object.fromEntries(
+          s0LotParsed.headers.map(header => [header, sourceRow[header] ?? ''])
+        ));
+        generatedS0LotText = appendRowsToTsv(otherState.get('other:m_gacha_lot.tsv')?.text ?? '', s0LotParsed.headers, stepupLotRowsToAppend);
       } else {
         generatedS0StepupText = '';
         generatedS0StepupAppealText = '';
@@ -952,7 +976,7 @@
       el('resultSummary').querySelector('.summary-title strong').textContent = `gacha_id ${activeGatchId} → ${replacementId} · S0 新增行预览`;
       el('lookupReady').className = 'lookup-ready';
       const normalMessage = isNormal ? `；normal ${normalMatches.length} 行；product info ${productInfoMatches.length} 行；lot 新增 ${lotRowsToAppend.length} 行` : '';
-      const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行；stepup product info ${stepupProductInfoMatches.length} 行` : '';
+      const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行；stepup product info ${stepupProductInfoMatches.length} 行；lot 新增 ${stepupLotRowsToAppend.length} 行` : '';
       el('lookupReady').textContent = `已追加 m_gacha ${masterRowsToAppend.length} 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
       el('replacementIdInput').value = '';
       el('downloadResultsBtn').disabled = false;
@@ -961,15 +985,15 @@
       el('downloadProductInfoBtn').disabled = !isNormal;
       el('downloadNormalBtn').hidden = !isNormal;
       el('downloadNormalBtn').disabled = !isNormal;
-      el('downloadLotBtn').hidden = !isNormal;
-      el('downloadLotBtn').disabled = !isNormal;
+      el('downloadLotBtn').hidden = !(isNormal || isStepup);
+      el('downloadLotBtn').disabled = !(isNormal || isStepup);
       el('downloadStepupBtn').hidden = !isStepup;
       el('downloadStepupBtn').disabled = !isStepup;
       el('downloadStepupTextBtn').hidden = !isStepup;
       el('downloadStepupTextBtn').disabled = !isStepup;
       el('downloadStepupProductInfoBtn').hidden = !isStepup;
       el('downloadStepupProductInfoBtn').disabled = !isStepup;
-      const generatedFileCount = 2 + (isNormal ? 3 : 0) + (isStepup ? 3 : 0);
+      const generatedFileCount = 2 + (isNormal ? 3 : 0) + (isStepup ? 4 : 0);
       showToast(`已生成 ${generatedFileCount} 个新的 S0 TSV 文件`);
     }
 
@@ -1013,7 +1037,7 @@
     }
 
     function downloadLotTsv(){
-      downloadTsv(generatedS0LotText, 'm_gacha_lot.tsv', `已下载 normal 配置所需的 m_gacha_lot.tsv`);
+      downloadTsv(generatedS0LotText, 'm_gacha_lot.tsv', `已下载当前配置所需的 m_gacha_lot.tsv`);
     }
 
     function downloadStepupTsv(){
