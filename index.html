@@ -168,8 +168,13 @@
     .lookup-action { display: flex; align-items: center; gap: 10px; min-height: 42px; }
     .player-type { display: none; padding: 7px 10px; border: 1px solid #8ab8af; border-radius: 4px; color: var(--teal); background: var(--teal-soft); font: 700 12px ui-monospace, monospace; white-space: nowrap; }
     .player-type.visible { display: inline-flex; }
-    .player-type.reissue { color: #7b3f00; border-color: #dfb36f; background: #fff4df; }
-    .player-type.new-character { color: #176348; border-color: #8fcab7; background: #e9f7f1; }
+    .player-type.reissue, .player-type.new-character {
+      align-items: center; min-height: 42px; padding: 9px 16px; border-width: 2px;
+      border-radius: 6px; font-size: 18px; font-weight: 900; letter-spacing: .08em;
+      box-shadow: 0 5px 14px rgba(19,35,58,.12);
+    }
+    .player-type.reissue { color: #7b3f00; border-color: #d79532; background: #fff0ce; }
+    .player-type.new-character { color: #0d6747; border-color: #4ca887; background: #ddf5ec; }
     .player-type.stepup { color: #8a4b00; border-color: #deb271; background: #fff4df; }
     .player-type.both { color: #274f86; border-color: #9bb8df; background: #edf4ff; }
     .field { display: grid; gap: 6px; }
