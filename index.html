@@ -168,6 +168,8 @@
     .lookup-action { display: flex; align-items: center; gap: 10px; min-height: 42px; }
     .player-type { display: none; padding: 7px 10px; border: 1px solid #8ab8af; border-radius: 4px; color: var(--teal); background: var(--teal-soft); font: 700 12px ui-monospace, monospace; white-space: nowrap; }
     .player-type.visible { display: inline-flex; }
+    .player-type.reissue { color: #7b3f00; border-color: #dfb36f; background: #fff4df; }
+    .player-type.new-character { color: #176348; border-color: #8fcab7; background: #e9f7f1; }
     .player-type.stepup { color: #8a4b00; border-color: #deb271; background: #fff4df; }
     .player-type.both { color: #274f86; border-color: #9bb8df; background: #edf4ff; }
     .field { display: grid; gap: 6px; }
@@ -421,6 +423,8 @@
     let collectedRows = [];
     let resultHeaders = [];
     let activeGatchId = '';
+    let activeCharacterType = '';
+    let activePreferredSourceKey = '';
     let generatedS0Text = '';
     let generatedS0AppealText = '';
     let generatedS0ProductInfoText = '';
@@ -648,6 +652,8 @@
       collectedRows = [];
       resultHeaders = [];
       activeGatchId = '';
+      activeCharacterType = '';
+      activePreferredSourceKey = '';
       generatedS0Text = '';
       generatedS0AppealText = '';
       generatedS0ProductInfoText = '';
@@ -682,17 +688,14 @@
       playerType.className = 'player-type';
     }
 
-    function showPlayerType(hasNormal, hasStepup){
+    function showCharacterType(characterType){
       const playerType = el('playerType');
-      if(hasNormal && hasStepup){
-        playerType.textContent = 'The player is normal player · The player is stepup player';
-        playerType.className = 'player-type visible both';
-      } else if(hasNormal){
-        playerType.textContent = 'The player is normal player';
-        playerType.className = 'player-type visible';
-      } else if(hasStepup){
-        playerType.textContent = 'The player is stepup player';
-        playerType.className = 'player-type visible stepup';
+      if(characterType === 'reissue'){
+        playerType.textContent = '复刻角色';
+        playerType.className = 'player-type visible reissue';
+      } else if(characterType === 'new'){
+        playerType.textContent = '新角色';
+        playerType.className = 'player-type visible new-character';
       } else {
         playerType.textContent = '';
         playerType.className = 'player-type';
@@ -726,16 +729,34 @@
       }
 
       activeGatchId = gatchId;
+      const s0Matches = matches.filter(row => row.source_key === 's0');
+      activeCharacterType = s0Matches.length ? 'reissue' : 'new';
+      activePreferredSourceKey = s0Matches.length
+        ? 's0'
+        : (matches.some(row => row.source_key === 'jp-original') ? 'jp-original' : 'jp-generated');
+      showCharacterType(activeCharacterType);
       const sourceHeaders = [...new Set(sources.flatMap(source => source.parsed.headers))];
       resultHeaders = ['source_file','source_type', ...sourceHeaders];
       collectedRows = matches;
       const originalCount = matches.filter(row => row.source_key === 'jp-original').length;
       const generatedCount = matches.filter(row => row.source_key === 'jp-generated').length;
       const s0Count = matches.filter(row => row.source_key === 's0').length;
-      el('replacementSource').innerHTML = matches.map((row, index) => `<option value="${index}">${escapeHtml(row.source_type)} · ${escapeHtml(row.source_file)} · 第 ${row._rowNumber} 行</option>`).join('');
+      const prioritizedMatches = activeCharacterType === 'reissue'
+        ? matches.filter(row => row.source_key === activePreferredSourceKey)
+        : matches;
+      const prioritizedIndexes = prioritizedMatches.map(row => matches.indexOf(row));
+      el('replacementSource').innerHTML = prioritizedIndexes.map(index => {
+        const row = matches[index];
+        return `<option value="${index}">${escapeHtml(row.source_type)} · ${escapeHtml(row.source_file)} · 第 ${row._rowNumber} 行</option>`;
+      }).join('');
+      el('replacementSourceHint').textContent = activeCharacterType === 'reissue'
+        ? '复刻角色按 S0 → JP Original → JP Generated 的优先级复制。'
+        : '新角色会复制所有已定位的 JP 配置行；请选择用于生成主表的一行。';
 
       el('lookupReady').className = 'lookup-ready';
-      el('lookupReady').textContent = `gacha_id ${gatchId} 已找到，可输入新 ID 并点击“替换”。`;
+      el('lookupReady').textContent = activeCharacterType === 'reissue'
+        ? `gacha_id ${gatchId} 已识别为复刻角色；可保留原 ID，配置按来源优先级复制。`
+        : `gacha_id ${gatchId} 已识别为新角色；请输入不同的新 ID 后点击“替换”。`;
       el('resultSummary').innerHTML = `
         <div class="summary-title"><strong>gacha_id ${escapeHtml(gatchId)} 的三文件匹配结果</strong><span>共 ${matches.length} 行 · ${resultHeaders.length} 个字段</span></div>
         <div class="summary-chip"><b>${matches.length}</b><span>匹配记录</span></div>
@@ -769,18 +790,30 @@
       el('resultBody').innerHTML = collectedRows.map(row => `<tr>${resultHeaders.map(key => `<td class="${resultColumnClass(key)}">${resultCell(row[key])}</td>`).join('')}</tr>`).join('');
     }
 
+    function rowsByCopyPriority(sources, field, value){
+      const rankedSources = [...sources].sort((a, b) => {
+        const rank = source => source.file.startsWith('S0 /') ? 0 : source.file.includes('.generated.') ? 2 : 1;
+        return rank(a) - rank(b);
+      });
+      const groups = rankedSources.map(source => source.parsed.rows.filter(row => row[field] === value));
+      if(activeCharacterType === 'reissue'){
+        return groups.find(rows => rows.length) ?? [];
+      }
+      return groups.flat();
+    }
+
     function replaceGatchId(){
       const replacementId = el('replacementIdInput').value;
       if(!activeGatchId || !collectedRows.length){ showToast('请先查找有效的 gacha_id'); return; }
       if(replacementId === ''){ showToast('请输入新的 gacha_id'); el('replacementIdInput').focus(); return; }
-      if(replacementId === activeGatchId){ showToast('新的 gacha_id 不能与原 ID 相同'); return; }
+      if(activeCharacterType === 'new' && replacementId === activeGatchId){ showToast('新角色的新 gacha_id 不能与原 ID 相同'); return; }
 
       const allSourceRows = [
         ...parsedFiles.get('m_gacha.tsv').rows,
         ...parsedFiles.get('m_gacha.generated.tsv').rows,
         ...otherParsedFiles.get('other:m_gacha.tsv').rows
       ];
-      if(allSourceRows.some(row => row.id === replacementId)){
+      if(replacementId !== activeGatchId && allSourceRows.some(row => row.id === replacementId)){
         showToast(`新的 gacha_id ${replacementId} 已存在`);
         return;
       }
@@ -789,18 +822,22 @@
       const selected = collectedRows[sourceIndex];
       if(!selected){ showToast('请选择要复制的来源记录'); return; }
       const s0Parsed = otherParsedFiles.get('other:m_gacha.tsv');
-      const appendedRow = Object.fromEntries(s0Parsed.headers.map(header => [header, header === 'id' ? replacementId : (selected[header] ?? '')]));
+      const masterSourceRows = activeCharacterType === 'reissue'
+        ? collectedRows.filter(row => row.source_key === activePreferredSourceKey)
+        : collectedRows.filter(row => row.source_key !== 's0');
+      const masterRowsToAppend = masterSourceRows.map(sourceRow => Object.fromEntries(
+        s0Parsed.headers.map(header => [header, header === 'id' ? replacementId : (sourceRow[header] ?? '')])
+      ));
+      const appendedRow = masterRowsToAppend[0];
       const originalItem = otherState.get('other:m_gacha.tsv');
-      generatedS0Text = appendRowsToTsv(originalItem?.text ?? '', s0Parsed.headers, [appendedRow]);
+      generatedS0Text = appendRowsToTsv(originalItem?.text ?? '', s0Parsed.headers, masterRowsToAppend);
 
       const appealSources = [
         {file:'m_gacha_appeal_image.tsv', label:'JP Original', parsed:parsedFiles.get('m_gacha_appeal_image.tsv')},
         {file:'m_gacha_appeal_image.generated.tsv', label:'JP Generated', parsed:parsedFiles.get('m_gacha_appeal_image.generated.tsv')},
         {file:'S0 / m_gacha_appeal_image.tsv', label:'S0 configuration', parsed:otherParsedFiles.get('other:m_gacha_appeal_image.tsv')}
       ];
-      const appealMatches = appealSources.flatMap(source => source.parsed.rows
-        .filter(row => row.gacha_id === activeGatchId)
-        .map(row => ({source_file:source.file, source_type:source.label, ...row})));
+      const appealMatches = rowsByCopyPriority(appealSources, 'gacha_id', activeGatchId);
       const s0AppealParsed = otherParsedFiles.get('other:m_gacha_appeal_image.tsv');
       const appealRowsToAppend = appealMatches.map(sourceRow => Object.fromEntries(
         s0AppealParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
@@ -820,7 +857,7 @@
           {file:'m_gacha_normal.generated.tsv', parsed:parsedFiles.get('m_gacha_normal.generated.tsv')},
           {file:'S0 / m_gacha_normal.tsv', parsed:otherParsedFiles.get('other:m_gacha_normal.tsv')}
         ];
-        normalMatches = normalSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        normalMatches = rowsByCopyPriority(normalSources, 'gacha_id', activeGatchId);
         const s0NormalParsed = otherParsedFiles.get('other:m_gacha_normal.tsv');
         const normalRowsToAppend = normalMatches.map(sourceRow => Object.fromEntries(
           s0NormalParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
@@ -832,7 +869,7 @@
           {file:'m_gacha_product_info.generated.tsv', parsed:parsedFiles.get('m_gacha_product_info.generated.tsv')},
           {file:'S0 / m_gacha_product_info.tsv', parsed:otherParsedFiles.get('other:m_gacha_product_info.tsv')}
         ];
-        productInfoMatches = productInfoSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        productInfoMatches = rowsByCopyPriority(productInfoSources, 'gacha_id', activeGatchId);
         const s0ProductInfoParsed = otherParsedFiles.get('other:m_gacha_product_info.tsv');
         const productInfoRowsToAppend = productInfoMatches.map(sourceRow => Object.fromEntries(
           s0ProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
@@ -844,10 +881,10 @@
         const existingS0LotIds = new Set(s0LotParsed.rows.map(row => String(row.id ?? '')));
         const missingLotIds = lotIds.filter(lotId => !existingS0LotIds.has(lotId));
         const jpLotSources = [
-          parsedFiles.get('m_gacha_lot.tsv'),
-          parsedFiles.get('m_gacha_lot.generated.tsv')
+          {file:'m_gacha_lot.tsv', parsed:parsedFiles.get('m_gacha_lot.tsv')},
+          {file:'m_gacha_lot.generated.tsv', parsed:parsedFiles.get('m_gacha_lot.generated.tsv')}
         ];
-        const sourceLotRows = jpLotSources.flatMap(parsed => parsed.rows.filter(row => missingLotIds.includes(String(row.id ?? ''))));
+        const sourceLotRows = missingLotIds.flatMap(lotId => rowsByCopyPriority(jpLotSources, 'id', lotId));
         lotRowsToAppend = sourceLotRows.map(sourceRow => Object.fromEntries(
           s0LotParsed.headers.map(header => [header, sourceRow[header] ?? ''])
         ));
@@ -867,7 +904,7 @@
           {file:'m_gacha_stepup.generated.tsv', parsed:parsedFiles.get('m_gacha_stepup.generated.tsv')},
           {file:'S0 / m_gacha_stepup.tsv', parsed:otherParsedFiles.get('other:m_gacha_stepup.tsv')}
         ];
-        stepupMatches = stepupSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        stepupMatches = rowsByCopyPriority(stepupSources, 'gacha_id', activeGatchId);
         const s0StepupParsed = otherParsedFiles.get('other:m_gacha_stepup.tsv');
         const stepupRowsToAppend = stepupMatches.map(sourceRow => Object.fromEntries(
           s0StepupParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
@@ -879,7 +916,7 @@
           {file:'m_gacha_stepup_appeal_text.generated.tsv', parsed:parsedFiles.get('m_gacha_stepup_appeal_text.generated.tsv')},
           {file:'S0 / m_gacha_stepup_appeal_text.tsv', parsed:otherParsedFiles.get('other:m_gacha_stepup_appeal_text.tsv')}
         ];
-        stepupAppealMatches = stepupAppealSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        stepupAppealMatches = rowsByCopyPriority(stepupAppealSources, 'gacha_id', activeGatchId);
         const s0StepupAppealParsed = otherParsedFiles.get('other:m_gacha_stepup_appeal_text.tsv');
         const stepupAppealRowsToAppend = stepupAppealMatches.map(sourceRow => Object.fromEntries(
           s0StepupAppealParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
@@ -891,7 +928,7 @@
           {file:'m_gacha_stepup_product_info.generated.tsv', parsed:parsedFiles.get('m_gacha_stepup_product_info.generated.tsv')},
           {file:'S0 / m_gacha_stepup_product_info.tsv', parsed:otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv')}
         ];
-        stepupProductInfoMatches = stepupProductInfoSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        stepupProductInfoMatches = rowsByCopyPriority(stepupProductInfoSources, 'gacha_id', activeGatchId);
         const s0StepupProductInfoParsed = otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv');
         const stepupProductInfoRowsToAppend = stepupProductInfoMatches.map(sourceRow => Object.fromEntries(
           s0StepupProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
@@ -911,7 +948,7 @@
       el('lookupReady').className = 'lookup-ready';
       const normalMessage = isNormal ? `；normal ${normalMatches.length} 行；product info ${productInfoMatches.length} 行；lot 新增 ${lotRowsToAppend.length} 行` : '';
       const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行；stepup product info ${stepupProductInfoMatches.length} 行` : '';
-      el('lookupReady').textContent = `已追加 m_gacha 1 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
+      el('lookupReady').textContent = `已追加 m_gacha ${masterRowsToAppend.length} 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
       el('replacementIdInput').value = '';
       el('downloadResultsBtn').disabled = false;
       el('downloadAppealBtn').disabled = false;
