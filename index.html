@@ -443,7 +443,7 @@
     const resultTextFields = new Set(['name','appeal_text','copyright_text','feature_players_warning','_note']);
     const resultLongFields = new Set(['banner_asset_name','banner_logo_asset_name','background_asset_name','logo_asset_name','appeal_asset_name','pre_banner_asset_name','pre_banner_logo_asset_name']);
     const resultNumberFields = new Set(['priority','rendition_id','is_use_new_layout','is_collabo_gacha']);
-    const resultIdFields = new Set(['id','original_gacha_id','replacement_gacha_id','my_pickup_id']);
+    const resultIdFields = new Set(['id','original_gacha_id','replacement_gacha_id','my_pickup_id','lot_id','assurance_lot_id']);
 
     function resultColumnClass(field){
       if(resultTextFields.has(field)) return 'col-text';
@@ -712,6 +712,28 @@
       }
     }
 
+    function relatedLotInfo(row){
+      const functionType = String(row.function_type ?? '').trim().toLowerCase();
+      let parsed;
+      if(functionType === 'normal'){
+        parsed = row.source_key === 's0'
+          ? otherParsedFiles.get('other:m_gacha_normal.tsv')
+          : parsedFiles.get(row.source_key === 'jp-generated' ? 'm_gacha_normal.generated.tsv' : 'm_gacha_normal.tsv');
+      } else if(functionType === 'stepup'){
+        parsed = row.source_key === 's0'
+          ? otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv')
+          : parsedFiles.get(row.source_key === 'jp-generated' ? 'm_gacha_stepup_product_info.generated.tsv' : 'm_gacha_stepup_product_info.tsv');
+      }
+      const relatedRows = parsed?.rows.filter(item => item.gacha_id === row.id) ?? [];
+      const joinedValues = field => [...new Set(relatedRows
+        .map(item => String(item[field] ?? '').trim())
+        .filter(Boolean))].join(', ');
+      return {
+        lot_id: joinedValues('lot_id'),
+        assurance_lot_id: functionType === 'stepup' ? joinedValues('assurance_lot_id') : ''
+      };
+    }
+
     function collectConfiguration(){
       clearLookupResults();
       const gatchId = el('cardIdInput').value;
@@ -749,7 +771,9 @@
       showCharacterType(activeCharacterType, activePlayerFunctionType);
       const sourceHeaders = [...new Set(sources.flatMap(source => source.parsed.headers))];
       resultHeaders = ['source_file','source_type', ...sourceHeaders];
-      collectedRows = matches;
+      if(!resultHeaders.includes('lot_id')) resultHeaders.push('lot_id');
+      if(activePlayerFunctionType === 'stepup' && !resultHeaders.includes('assurance_lot_id')) resultHeaders.push('assurance_lot_id');
+      collectedRows = matches.map(row => ({...row, ...relatedLotInfo(row)}));
       const originalCount = matches.filter(row => row.source_key === 'jp-original').length;
       const generatedCount = matches.filter(row => row.source_key === 'jp-generated').length;
       const s0Count = matches.filter(row => row.source_key === 's0').length;
@@ -970,7 +994,14 @@
       }
       generatedS0Id = replacementId;
 
-      const previewRow = {source_key:'s0-new', source_file:'S0 / m_gacha.tsv (new row)', source_type:`Copied from ${selected.source_type}`, ...appendedRow};
+      const previewRow = {
+        source_key:'s0-new',
+        source_file:'S0 / m_gacha.tsv (new row)',
+        source_type:`Copied from ${selected.source_type}`,
+        ...appendedRow,
+        lot_id:selected.lot_id ?? '',
+        assurance_lot_id:selected.assurance_lot_id ?? ''
+      };
       collectedRows = [...collectedRows, previewRow];
       renderResultTable();
       el('resultSummary').querySelector('.summary-title strong').textContent = `gacha_id ${activeGatchId} → ${replacementId} · S0 新增行预览`;
