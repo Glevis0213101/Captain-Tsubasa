@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>队长小翼 · TSV 配置工作台</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f6f8fb;
+      --surface: #ffffff;
+      --ink: #13233a;
+      --muted: #607087;
+      --rule: #c9d6e5;
+      --cyan: #087ea4;
+      --cyan-soft: #eaf7fb;
+      --teal: #147d64;
+      --teal-soft: #e8f5f1;
+      --amber: #a66300;
+      --amber-soft: #fff5df;
+      --red: #b42335;
+      --shadow: 0 14px 42px rgba(19, 35, 58, .08);
+      --radius: 6px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      background:
+        linear-gradient(90deg, transparent 39px, rgba(184,203,224,.22) 40px, transparent 41px) 0 0 / 80px 80px,
+        linear-gradient(transparent 39px, rgba(184,203,224,.18) 40px, transparent 41px) 0 0 / 80px 80px,
+        var(--paper);
+      color: var(--ink);
+      font-family: Inter, "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+      line-height: 1.5;
+    }
+
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    button:focus-visible, .upload-card:focus-within, input:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(8,126,164,.28);
+      outline-offset: 2px;
+    }
+
+    .shell { min-height: 100vh; display: grid; grid-template-columns: 220px minmax(0,1fr); }
+    .rail {
+      position: sticky; top: 0; height: 100vh; padding: 30px 22px;
+      background: rgba(255,255,255,.92); border-right: 1px solid var(--rule);
+      backdrop-filter: blur(12px); z-index: 4;
+    }
+    .brand { display: flex; gap: 12px; align-items: center; margin-bottom: 42px; }
+    .brand-mark {
+      width: 46px; height: 46px; display: block; flex: 0 0 auto;
+      border: 1px solid rgba(19,35,58,.14); border-radius: 11px;
+      background: var(--surface); object-fit: cover; box-shadow: 0 5px 14px rgba(19,35,58,.14);
+    }
+    .brand-title { font-weight: 800; letter-spacing: .08em; }
+    .brand-sub { color: var(--muted); font: 11px ui-monospace, monospace; letter-spacing: .08em; }
+    .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .step { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center; padding: 10px; color: var(--muted); border-left: 2px solid transparent; }
+    .step strong { font: 700 12px ui-monospace, monospace; }
+    .step span { font-size: 13px; }
+    .step.active { background: var(--cyan-soft); border-color: var(--cyan); color: var(--ink); }
+    .privacy { position: absolute; left: 22px; right: 22px; bottom: 28px; color: var(--muted); font-size: 11px; }
+    .privacy::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--teal); }
+
+    main { min-width: 0; padding: 28px 36px 110px; }
+    .topbar { display: flex; justify-content: space-between; gap: 24px; align-items: center; margin-bottom: 34px; }
+    .eyebrow { color: var(--cyan); font: 700 11px ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; }
+    h1 { margin: 5px 0 4px; font-size: clamp(28px,4vw,50px); line-height: 1.02; letter-spacing: -.04em; }
+    .lead { margin: 0; color: var(--muted); max-width: 680px; }
+    .counter {
+      min-width: 130px; padding: 13px 16px; background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .counter-line { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+    .counter strong { font: 800 30px ui-monospace, monospace; }
+    .counter span { color: var(--muted); font-size: 12px; }
+    .meter { height: 4px; margin-top: 9px; overflow: hidden; background: #e5ebf2; }
+    .meter > i { display: block; width: 0; height: 100%; background: var(--teal); transition: width .25s ease; }
+
+    .batch-drop {
+      position: relative; display: grid; grid-template-columns: 44px 1fr auto; gap: 16px; align-items: center;
+      padding: 18px 20px; margin-bottom: 26px; border: 1px dashed var(--cyan); background: rgba(234,247,251,.82); border-radius: var(--radius);
+      transition: transform .15s, background .15s;
+    }
+    .batch-drop.dragging { transform: translateY(-2px); background: #dff4fa; }
+    .batch-icon { width: 44px; height: 44px; display: grid; place-items: center; color: var(--cyan); border: 1px solid #afd6e4; background: white; font-size: 25px; }
+    .batch-drop strong { display: block; font-size: 15px; }
+    .batch-drop small { color: var(--muted); }
+    .input-cover { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .choose-label { padding: 9px 14px; color: var(--cyan); border: 1px solid var(--cyan); background: white; border-radius: 4px; font-weight: 700; font-size: 13px; pointer-events: none; }
+
+    [hidden] { display: none !important; }
+    .stage-panel[hidden], .stage-hidden { display: none; }
+    .stage-intro {
+      display: flex; justify-content: space-between; gap: 18px; align-items: center;
+      margin: 34px 0 16px; padding-top: 24px; border-top: 1px solid var(--rule);
+    }
+    .stage-intro h2 { margin: 2px 0 4px; font-size: 24px; letter-spacing: -.025em; }
+    .stage-intro p { margin: 0; color: var(--muted); font-size: 13px; }
+    .stage-count {
+      flex: none; min-width: 94px; padding: 9px 12px; text-align: center;
+      color: var(--cyan); background: var(--cyan-soft); border: 1px solid #afd6e4; border-radius: var(--radius);
+      font: 800 18px ui-monospace, monospace;
+    }
+    .confirmed-banner {
+      display: flex; justify-content: space-between; gap: 16px; align-items: center;
+      margin: 18px 0; padding: 14px 16px; color: var(--teal); background: var(--teal-soft);
+      border: 1px solid #b8ddd2; border-left: 4px solid var(--teal); border-radius: var(--radius);
+    }
+    .confirmed-banner strong { display: block; }
+    .confirmed-banner span { color: #4c6e66; font-size: 12px; }
+    .other-board { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .other-board .upload-card { min-height: 112px; }
+
+    .pair-board { display: grid; gap: 10px; }
+    .pair-board-head, .pair-row {
+      display: grid; grid-template-columns: minmax(210px, .8fr) repeat(2, minmax(250px, 1fr));
+      gap: 10px; align-items: stretch;
+    }
+    .pair-board-head { padding: 0 4px; color: var(--muted); font: 700 11px ui-monospace, monospace; letter-spacing: .06em; text-transform: uppercase; }
+    .pair-label {
+      display: flex; align-items: center; gap: 12px; min-width: 0; padding: 15px 16px;
+      color: var(--ink); background: #edf3f8; border: 1px solid var(--rule); border-radius: var(--radius);
+    }
+    .pair-number { flex: none; color: var(--cyan); font: 800 20px ui-monospace, monospace; }
+    .pair-label strong { display: block; min-width: 0; overflow-wrap: anywhere; font: 750 13px ui-monospace, monospace; }
+    .pair-label small { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+
+    .upload-card {
+      position: relative; min-height: 104px; padding: 13px 14px; background: rgba(255,255,255,.94); border: 1px solid var(--rule); border-left: 3px solid var(--rule); border-radius: var(--radius);
+      transition: border-color .15s, transform .15s, box-shadow .15s;
+    }
+    .upload-card.generated { background: linear-gradient(135deg, rgba(238,243,251,.94), #fff 65%); }
+    .upload-card:hover { border-color: #96b6d2; transform: translateY(-1px); }
+    .upload-card.dragging { border-color: var(--cyan); background: var(--cyan-soft); box-shadow: var(--shadow); }
+    .upload-card.loaded { border-left-color: var(--teal); background: linear-gradient(90deg,var(--teal-soft),#fff 28%); }
+    .upload-card.warning { border-left-color: var(--amber); background: linear-gradient(90deg,var(--amber-soft),#fff 30%); }
+    .card-top { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .file-name { margin: 2px 0 0; overflow-wrap: anywhere; font: 700 12px ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code { color: var(--muted); font: 700 10px ui-monospace, monospace; letter-spacing: .08em; text-transform: uppercase; }
+    .state { flex: none; padding: 3px 7px; border-radius: 99px; background: #edf1f6; color: var(--muted); font-size: 10px; }
+    .loaded .state { background: var(--teal-soft); color: var(--teal); }
+    .warning .state { background: var(--amber-soft); color: var(--amber); }
+    .card-hint { margin: 9px 0 0; color: var(--muted); font-size: 11px; }
+    .card-action { color: var(--cyan); font-weight: 700; }
+    .card-input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+    .meta { display: none; margin-top: 9px; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .loaded .meta, .warning .meta { display: grid; }
+    .meta-text { min-width: 0; }
+    .actual-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px ui-monospace, monospace; }
+    .stats { color: var(--muted); font-size: 10px; }
+    .remove { position: relative; z-index: 2; padding: 5px 8px; border: 0; background: transparent; color: var(--red); font-size: 11px; }
+    .message { display: none; margin: 7px 0 0; color: var(--amber); font-size: 10px; }
+    .warning .message { display: block; }
+
+    .lookup-panel {
+      margin-top: 34px; padding: 22px; background: rgba(255,255,255,.96);
+      border: 1px solid var(--rule); border-top: 3px solid var(--cyan); border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .lookup-head { display: flex; justify-content: space-between; gap: 20px; align-items: start; margin-bottom: 18px; }
+    .lookup-head h2 { margin: 2px 0 4px; font-size: 22px; letter-spacing: -.02em; }
+    .lookup-head p { margin: 0; color: var(--muted); font-size: 13px; }
+    .rule-badge { flex: none; padding: 5px 8px; color: var(--teal); background: var(--teal-soft); border-radius: 99px; font: 700 11px ui-monospace, monospace; }
+    .lookup-form { display: grid; grid-template-columns: minmax(220px,1fr) auto; gap: 10px; align-items: end; max-width: 860px; }
+    .lookup-action { display: flex; align-items: center; gap: 10px; min-height: 42px; }
+    .player-type { display: none; padding: 7px 10px; border: 1px solid #8ab8af; border-radius: 4px; color: var(--teal); background: var(--teal-soft); font: 700 12px ui-monospace, monospace; white-space: nowrap; }
+    .player-type.visible { display: inline-flex; }
+    .player-type.stepup { color: #8a4b00; border-color: #deb271; background: #fff4df; }
+    .player-type.both { color: #274f86; border-color: #9bb8df; background: #edf4ff; }
+    .field { display: grid; gap: 6px; }
+    .field label { font-size: 12px; font-weight: 750; }
+    .field input, .field select { min-height: 42px; width: 100%; padding: 9px 11px; color: var(--ink); background: white; border: 1px solid #9fb0c4; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .field small, .lookup-ready { color: var(--muted); font-size: 11px; }
+    .lookup-ready { margin: 12px 0 0; }
+    .lookup-ready.error, .lookup-error { color: var(--red); }
+    .lookup-results { display: none; margin-top: 22px; }
+    .lookup-results.visible { display: block; }
+    .result-summary {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+      gap: 9px; margin-bottom: 14px;
+    }
+    .summary-title {
+      grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: baseline;
+      justify-content: space-between; gap: 6px 16px; padding-bottom: 5px;
+    }
+    .summary-title strong { font-size: 16px; }
+    .summary-title span { color: var(--muted); font-size: 11px; }
+    .summary-chip {
+      min-width: 0; padding: 10px 11px; background: #f4f7fa;
+      border: 1px solid #dbe4ed; border-radius: 4px;
+    }
+    .summary-chip b { display: block; color: var(--ink); font: 800 18px ui-monospace, monospace; }
+    .summary-chip span { display: block; margin-top: 1px; color: var(--muted); font-size: 11px; }
+    .table-meta {
+      display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px;
+      margin: 0 0 7px; color: var(--muted); font-size: 11px;
+    }
+    .table-wrap {
+      max-height: min(64vh, 680px); overflow: auto; border: 1px solid var(--rule);
+      border-radius: 4px; background: white; scrollbar-gutter: stable;
+    }
+    .result-table {
+      width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0;
+      font-size: 12px;
+    }
+    .result-table th {
+      position: sticky; top: 0; z-index: 2; padding: 9px 10px; color: var(--muted);
+      background: #f2f5f9; border-bottom: 1px solid var(--rule); text-align: left;
+      font: 700 11px ui-monospace, monospace; white-space: nowrap; overflow-wrap: normal;
+      word-break: normal;
+    }
+    .result-table td {
+      padding: 9px 10px; border-bottom: 1px solid #e7edf3; vertical-align: top;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: normal;
+      overflow-wrap: anywhere; word-break: break-word;
+    }
+    .result-table tr:last-child td { border-bottom: 0; }
+    .result-table tbody tr:hover td { background-color: #f8fbfd; }
+    .result-table .col-id { width: 140px; min-width: 140px; max-width: 140px; }
+    .result-table .col-number { width: 96px; min-width: 82px; max-width: 112px; font-variant-numeric: tabular-nums; }
+    .result-table .col-text { width: 210px; min-width: 170px; max-width: 250px; }
+    .result-table .col-long { width: 280px; min-width: 220px; max-width: 340px; }
+    .result-table .col-default { width: 150px; min-width: 120px; max-width: 190px; }
+    .result-table th:first-child, .result-table td:first-child {
+      position: sticky; left: 0; z-index: 1; background: #fff; box-shadow: 1px 0 0 var(--rule);
+    }
+    .result-table th:first-child { z-index: 3; background: #f2f5f9; }
+    .result-table tbody tr:hover td:first-child { background: #f8fbfd; }
+    .empty-value { color: #a2afbd; }
+    .replace-panel {
+      display: grid; grid-template-columns: minmax(210px, .8fr) minmax(220px, 1fr) auto; gap: 10px;
+      align-items: end; margin-top: 14px; padding: 14px; background: var(--amber-soft);
+      border: 1px solid #e3c58d; border-radius: var(--radius);
+    }
+    .replace-panel[hidden] { display: none; }
+    .replace-panel .btn { min-width: 104px; }
+    .result-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+
+    .footer {
+      position: fixed; z-index: 5; left: 220px; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 20px;
+      padding: 15px 36px; border-top: 1px solid var(--rule); background: rgba(255,255,255,.94); backdrop-filter: blur(14px);
+    }
+    .footer-note { color: var(--muted); font-size: 12px; }
+    .actions { display: flex; gap: 10px; }
+    .btn { min-height: 42px; padding: 0 17px; border-radius: 4px; font-weight: 750; border: 1px solid var(--rule); background: white; color: var(--ink); }
+    .btn.primary { border-color: var(--cyan); background: var(--cyan); color: white; }
+    .btn.primary:disabled { cursor: not-allowed; border-color: #aab6c4; background: #aab6c4; }
+    .toast { position: fixed; z-index: 10; right: 22px; bottom: 88px; max-width: 380px; padding: 13px 16px; color: white; background: var(--ink); border-radius: 5px; box-shadow: var(--shadow); transform: translateY(12px); opacity: 0; pointer-events: none; transition: .18s; }
+    .toast.show { transform: translateY(0); opacity: 1; }
+
+    @media (max-width: 900px) {
+      .shell { display: block; }
+      .rail { position: static; width: 100%; height: auto; padding: 18px 20px; border-right: 0; border-bottom: 1px solid var(--rule); }
+      .brand { margin: 0 0 14px; }
+      .steps { grid-template-columns: repeat(4,1fr); gap: 4px; }
+      .step { grid-template-columns: 1fr; gap: 2px; padding: 7px; }
+      .step strong { font-size: 10px; }
+      .step span { font-size: 11px; }
+      .privacy { position: static; margin-top: 12px; }
+      main { padding: 24px 20px 110px; }
+      .pair-board-head, .pair-row { grid-template-columns: 180px repeat(2, minmax(220px, 1fr)); }
+      .footer { left: 0; padding: 13px 20px; }
+    }
+    @media (max-width: 650px) {
+      .topbar { align-items: stretch; flex-direction: column; }
+      .counter { width: 100%; }
+      .batch-drop { grid-template-columns: 38px 1fr; }
+      .choose-label { grid-column: 1 / -1; text-align: center; }
+      .pair-board-head { display: none; }
+      .pair-row { grid-template-columns: 1fr; gap: 7px; margin-bottom: 14px; }
+      .pair-label { padding: 10px 12px; }
+      .pair-label small { display: inline; margin: 0 0 0 6px; }
+      .stage-intro { align-items: flex-start; }
+      .other-board { grid-template-columns: 1fr; }
+      .confirmed-banner { align-items: flex-start; flex-direction: column; }
+      .lookup-head { flex-direction: column; gap: 8px; }
+      .lookup-form, .replace-panel { grid-template-columns: 1fr; }
+      .result-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .summary-title { display: block; }
+      .summary-title span { display: block; margin-top: 3px; }
+      .table-meta span:last-child { display: none; }
+      .result-table .col-id { width: 126px; min-width: 126px; max-width: 126px; }
+      .result-table .col-number { width: 88px; min-width: 76px; max-width: 98px; }
+      .result-table .col-text { width: 184px; min-width: 160px; max-width: 210px; }
+      .result-table .col-long { width: 220px; min-width: 190px; max-width: 250px; }
+      .result-table .col-default { width: 138px; min-width: 112px; max-width: 160px; }
+      .footer-note { display: none; }
+      .footer { justify-content: flex-end; }
+    }
+    @media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior: auto!important; transition: none!important; } }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail" aria-label="配置步骤">
+      <div class="brand"><img class="brand-mark" src="data:image/png;base64,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" alt="Captain Tsubasa: Dream Team App 图标"><div><div class="brand-title">队长小翼</div><div class="brand-sub">GACHA CONFIG</div></div></div>
+      <ol class="steps">
+        <li class="step active"><strong>01</strong><span>载入文件</span></li>
+        <li class="step"><strong>02</strong><span>映射关系</span></li>
+        <li class="step"><strong>03</strong><span>修改配置</span></li>
+        <li class="step"><strong>04</strong><span>导出结果</span></li>
+      </ol>
+      <div class="privacy">文件仅在当前浏览器中处理</div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <div class="eyebrow">Japan source set / File intake</div>
+          <h1>载入日本版卡池配置</h1>
+          <p class="lead">先载入 9 组原始与 Generated TSV，共 18 个文件。系统会按完整文件名自动配对并检查缺失项。</p>
+        </div>
+        <section class="counter" aria-label="载入进度">
+          <div class="counter-line"><strong id="loadedCount">0/18</strong><span>已就绪</span></div>
+          <div class="meter"><i id="meterBar"></i></div>
+        </section>
+      </header>
+
+      <label class="batch-drop" id="batchDrop">
+        <span class="batch-icon" aria-hidden="true">＋</span>
+        <span><strong>拖入 18 个日本版 TSV 文件</strong><small>可一次全选；系统按 Original / Generated 文件名自动放入 9 组</small></span>
+        <span class="choose-label">选择多个文件</span>
+        <input class="input-cover" id="batchInput" type="file" accept=".tsv,text/tab-separated-values,text/plain" multiple aria-label="选择多个 TSV 文件">
+      </label>
+
+      <section class="pair-board" id="japanStage" aria-label="日本版配置文件配对">
+        <div class="pair-board-head" aria-hidden="true"><span>配置表</span><span>Original · 日本原始文件</span><span>Generated · 生成文件</span></div>
+        <div id="pairRows"></div>
+      </section>
+
+      <div class="confirmed-banner" id="japanConfirmed" hidden>
+        <div><strong>日本版配置已确认</strong><span>18 个文件已锁定并保留，可继续载入另一组配置。</span></div>
+        <span>18 / 18 READY</span>
+      </div>
+
+      <section class="stage-panel" id="otherStage" hidden aria-labelledby="otherStageTitle">
+        <div class="stage-intro">
+          <div><div class="eyebrow">Stage 02 / S0 configuration</div><h2 id="otherStageTitle">载入S0 配置文件</h2><p>载入截图所示的 9 个原始 TSV 文件。此组文件与日本版配置独立保存。</p></div>
+          <div class="stage-count" id="otherCount">0 / 9</div>
+        </div>
+        <label class="batch-drop" id="otherBatchDrop">
+          <span class="batch-icon" aria-hidden="true">＋</span>
+          <span><strong>拖入 9 个S0 配置 TSV</strong><small>可一次全选；系统按完整文件名自动匹配</small></span>
+          <span class="choose-label">选择 9 个文件</span>
+          <input class="input-cover" id="otherBatchInput" type="file" accept=".tsv,text/tab-separated-values,text/plain" multiple aria-label="选择S0 配置 TSV 文件">
+        </label>
+        <div class="other-board" id="otherRows"></div>
+      </section>
+
+      <section class="lookup-panel" id="lookupPanel" hidden aria-labelledby="lookupTitle">
+        <div class="lookup-head">
+          <div><div class="eyebrow">S0 configuration rules</div><h2 id="lookupTitle">按 gacha_id 查找配置</h2><p>匹配三份 gacha 主表；替换后生成 S0 主表与图片配置。若类型为 normal，同时生成商品信息配置；若类型为 stepup，同时生成步骤池及步骤文案配置。</p></div>
+          <span class="rule-badge">3 FILE MATCH · S0 APPEND</span>
+        </div>
+        <div class="lookup-form">
+          <div class="field">
+            <label for="cardIdInput">gacha_id · JP 与 S0 m_gacha 文件</label>
+            <input id="cardIdInput" type="text" inputmode="numeric" autocomplete="off" placeholder="例如 352" aria-describedby="lookupReady">
+            <small>精确匹配 id 字段；保留输入中的前导零。</small>
+          </div>
+          <div class="lookup-action">
+            <button class="btn primary" id="lookupBtn" type="button">查找 gacha_id</button>
+            <span class="player-type" id="playerType" role="status"></span>
+          </div>
+        </div>
+        <p class="lookup-ready" id="lookupReady">需要载入全部 18 个日本版配置文件。</p>
+        <div class="lookup-results" id="lookupResults" aria-live="polite">
+          <div class="result-summary" id="resultSummary"></div>
+          <div class="table-meta"><span id="resultTableLabel">完整字段明细</span><span>单元格自动换行 · 首列固定 · 可横向滚动</span></div>
+          <div class="table-wrap" role="region" aria-labelledby="resultTableLabel" tabindex="0">
+            <table class="result-table">
+              <thead><tr id="resultHead"></tr></thead>
+              <tbody id="resultBody"></tbody>
+            </table>
+          </div>
+          <div class="replace-panel" id="replacePanel" hidden>
+            <div class="field"><label for="replacementSource">复制来源</label><select id="replacementSource" aria-describedby="replacementSourceHint"></select><small id="replacementSourceHint">如果同一 ID 位于多个文件，请选择要复制的完整记录。</small></div>
+            <div class="field"><label for="replacementIdInput">新的 gacha_id</label><input id="replacementIdInput" type="text" inputmode="numeric" autocomplete="off" placeholder="输入新的 gacha_id"><small>将复制所选来源行，只修改 ID，并追加到对应 S0 TSV 底部。</small></div>
+            <button class="btn primary" id="replaceIdBtn" type="button">替换并生成</button>
+          </div>
+          <div class="result-actions"><button class="btn" id="downloadResultsBtn" type="button" disabled>下载新的 S0 m_gacha.tsv</button><button class="btn" id="downloadAppealBtn" type="button" disabled>下载新的 S0 m_gacha_appeal_image.tsv</button><button class="btn" id="downloadProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_product_info.tsv</button><button class="btn" id="downloadStepupBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup.tsv</button><button class="btn" id="downloadStepupTextBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_appeal_text.tsv</button></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <footer class="footer">
+    <div class="footer-note" id="footerNote">还需载入 18 个文件</div>
+    <div class="actions"><button class="btn" id="resetBtn" type="button">全部清除</button><button class="btn primary" id="continueBtn" type="button" disabled>确认日本版配置 →</button></div>
+  </footer>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const filePairs = [
+      {key:'appeal-image', label:'Appeal image', base:'m_gacha_appeal_image'},
+      {key:'lot', label:'Gacha lot', base:'m_gacha_lot'},
+      {key:'normal', label:'Normal gacha', base:'m_gacha_normal'},
+      {key:'prize', label:'Gacha prize', base:'m_gacha_prize'},
+      {key:'product-info', label:'Product info', base:'m_gacha_product_info'},
+      {key:'stepup-appeal-text', label:'Step-up appeal text', base:'m_gacha_stepup_appeal_text'},
+      {key:'stepup-product-info', label:'Step-up product info', base:'m_gacha_stepup_product_info'},
+      {key:'stepup', label:'Step-up settings', base:'m_gacha_stepup'},
+      {key:'gacha', label:'Gacha master', base:'m_gacha'}
+    ];
+    const requirements = filePairs.flatMap((pair, index) => [
+      {code:`JP-${String(index + 1).padStart(2,'0')}A`, stage:'japan', pair:pair.key, kind:'original', name:`${pair.base}.tsv`, label:pair.label},
+      {code:`JP-${String(index + 1).padStart(2,'0')}B`, stage:'japan', pair:pair.key, kind:'generated', name:`${pair.base}.generated.tsv`, label:pair.label}
+    ]);
+    const otherRequirements = filePairs.map((pair, index) => ({
+      code:`OT-${String(index + 1).padStart(2,'0')}`, stage:'other', kind:'other', storageKey:`other:${pair.base}.tsv`, name:`${pair.base}.tsv`, label:pair.label
+    }));
+    const allRequirements = [...requirements, ...otherRequirements];
+    const state = new Map();
+    const parsedFiles = new Map();
+    const otherState = new Map();
+    const otherParsedFiles = new Map();
+    let japanConfirmed = false;
+    let collectedRows = [];
+    let resultHeaders = [];
+    let activeGatchId = '';
+    let generatedS0Text = '';
+    let generatedS0AppealText = '';
+    let generatedS0ProductInfoText = '';
+    let generatedS0StepupText = '';
+    let generatedS0StepupAppealText = '';
+    let generatedS0Id = '';
+    const resultTextFields = new Set(['name','appeal_text','copyright_text','feature_players_warning','_note']);
+    const resultLongFields = new Set(['banner_asset_name','banner_logo_asset_name','background_asset_name','logo_asset_name','appeal_asset_name','pre_banner_asset_name','pre_banner_logo_asset_name']);
+    const resultNumberFields = new Set(['priority','rendition_id','is_use_new_layout','is_collabo_gacha']);
+    const resultIdFields = new Set(['id','original_gacha_id','replacement_gacha_id','my_pickup_id']);
+
+    function resultColumnClass(field){
+      if(resultTextFields.has(field)) return 'col-text';
+      if(resultLongFields.has(field)) return 'col-long';
+      if(resultNumberFields.has(field)) return 'col-number';
+      if(resultIdFields.has(field)) return 'col-id';
+      return 'col-default';
+    }
+
+    function resultCell(value){
+      const text = String(value ?? '');
+      return text === '' ? '<span class="empty-value" aria-label="空值">—</span>' : escapeHtml(text);
+    }
+
+    const el = id => document.getElementById(id);
+    const escapeHtml = str => String(str).replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+
+    function uploadCardMarkup(req){
+      const kindLabel = req.kind === 'generated' ? 'Generated' : req.kind === 'other' ? 'S0 configuration' : 'Original';
+      const storageKey = req.storageKey || req.name;
+      return `<article class="upload-card ${req.kind === 'generated' ? 'generated' : ''}" data-stage="${req.stage}" data-expected="${escapeHtml(storageKey)}">
+        <div class="card-top"><div><div class="code">${kindLabel}</div><h3 class="file-name">${escapeHtml(req.name)}</h3></div><span class="state">等待载入</span></div>
+        <p class="card-hint"><span class="card-action">选择文件</span> 或拖放到此处</p>
+        <div class="meta"><div class="meta-text"><span class="actual-name"></span><span class="stats"></span></div><button class="remove" type="button">移除</button></div>
+        <p class="message"></p>
+        <input class="card-input" type="file" accept=".tsv,text/tab-separated-values,text/plain" aria-label="为 ${escapeHtml(req.name)} 选择文件">
+      </article>`;
+    }
+
+    function bindUploadCard(card, req){
+      const input = card.querySelector('input');
+      input.addEventListener('change', () => input.files[0] && assignFile(req, input.files[0]));
+      card.querySelector('.remove').addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); removeFile(req); });
+      ['dragenter','dragover'].forEach(type => card.addEventListener(type, e => {e.preventDefault(); card.classList.add('dragging');}));
+      ['dragleave','drop'].forEach(type => card.addEventListener(type, e => {e.preventDefault(); card.classList.remove('dragging');}));
+      card.addEventListener('drop', e => e.dataTransfer.files[0] && assignFile(req, e.dataTransfer.files[0]));
+    }
+
+    function renderCards(){
+      const rows = el('pairRows');
+      rows.innerHTML = filePairs.map((pair, index) => {
+        const original = requirements.find(req => req.pair === pair.key && req.kind === 'original');
+        const generated = requirements.find(req => req.pair === pair.key && req.kind === 'generated');
+        return `<div class="pair-row">
+          <div class="pair-label"><span class="pair-number">${String(index + 1).padStart(2,'0')}</span><div><strong>${escapeHtml(pair.label)}</strong><small>1 个配对 · 2 个文件</small></div></div>
+          ${uploadCardMarkup(original)}
+          ${uploadCardMarkup(generated)}
+        </div>`;
+      }).join('');
+      requirements.forEach(req => bindUploadCard(document.querySelector(`[data-expected="${req.name}"]`), req));
+      el('otherRows').innerHTML = otherRequirements.map(req => uploadCardMarkup(req)).join('');
+      otherRequirements.forEach(req => bindUploadCard(document.querySelector(`[data-expected="${req.storageKey}"]`), req));
+    }
+
+    function normalized(name){ return name.toLowerCase().trim(); }
+    function findRequirement(fileName, stage='japan'){
+      const n = normalized(fileName);
+      const pool = stage === 'other' ? otherRequirements : requirements;
+      return pool.find(r => normalized(r.name) === n || (r.aliases || []).some(a => normalized(a) === n));
+    }
+
+    async function parseTsv(file){
+      const text = await file.text();
+      const clean = text.replace(/^﻿/, '');
+      const lines = clean.split(/\r\n|\n|\r/).filter((line,i,a) => !(i===a.length-1 && line===''));
+      const headers = lines.length ? lines[0].split('\t') : [];
+      const rows = lines.slice(1).map((line, index) => {
+        const values = line.split('\t');
+        const row = {_rowNumber: index + 2};
+        headers.forEach((header, column) => row[header] = values[column] ?? '');
+        return row;
+      });
+      return {headers, rows};
+    }
+
+    async function inspect(file){
+      const parsed = await parseTsv(file);
+      return {rows: parsed.rows.length, columns: parsed.headers.length, parsed};
+    }
+
+    async function assignFile(req, file){
+      if(req.stage === 'japan' && japanConfirmed){ showToast('日本版配置已确认并锁定'); return; }
+      if (!file.name.toLowerCase().endsWith('.tsv') && !(req.aliases || []).includes(file.name)) {
+        showToast(`${file.name} 不是 TSV 文件`); return;
+      }
+      const exact = normalized(file.name) === normalized(req.name) || (req.aliases || []).some(a => normalized(a) === normalized(file.name));
+      if(!exact){ showToast(`文件名不匹配；此位置需要 ${req.name}`); return; }
+      const info = await inspect(file);
+      const text = await file.text();
+      const targetState = req.stage === 'other' ? otherState : state;
+      const targetParsed = req.stage === 'other' ? otherParsedFiles : parsedFiles;
+      const storageKey = req.storageKey || req.name;
+      targetParsed.set(storageKey, info.parsed);
+      targetState.set(storageKey, {file, info, text, exact:true});
+      updateCard(req); updateProgress(); updateLookupState();
+    }
+
+    function updateCard(req){
+      const storageKey = req.storageKey || req.name;
+      const card = document.querySelector(`[data-expected="${storageKey}"]`);
+      const item = (req.stage === 'other' ? otherState : state).get(storageKey);
+      card.classList.remove('loaded','warning');
+      if(!item){ card.querySelector('.state').textContent='等待载入'; return; }
+      card.classList.add('loaded');
+      card.querySelector('.state').textContent = '已就绪';
+      card.querySelector('.actual-name').textContent = item.file.name;
+      card.querySelector('.stats').textContent = `${formatBytes(item.file.size)} · ${item.info.rows.toLocaleString()} 行 · ${item.info.columns} 列`;
+      card.querySelector('.message').textContent = '';
+    }
+
+    function removeFile(req){
+      if(req.stage === 'japan' && japanConfirmed){ showToast('日本版配置已确认并锁定'); return; }
+      const storageKey = req.storageKey || req.name;
+      const targetState = req.stage === 'other' ? otherState : state;
+      const targetParsed = req.stage === 'other' ? otherParsedFiles : parsedFiles;
+      targetState.delete(storageKey); targetParsed.delete(storageKey);
+      const input=document.querySelector(`[data-expected="${storageKey}"] input`); input.value='';
+      updateCard(req); updateProgress(); updateLookupState(); clearLookupResults();
+    }
+    function formatBytes(bytes){ if(bytes < 1024) return `${bytes} B`; if(bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`; return `${(bytes/1048576).toFixed(1)} MB`; }
+    function updateProgress(){
+      const japanCount=state.size, japanLeft=requirements.length-japanCount;
+      const otherCount=otherState.size, otherLeft=otherRequirements.length-otherCount;
+      el('loadedCount').textContent=`${japanCount}/${requirements.length}`;
+      el('meterBar').style.width=`${japanCount/requirements.length*100}%`;
+      el('otherCount').textContent=`${otherCount} / ${otherRequirements.length}`;
+      if(!japanConfirmed){
+        el('footerNote').textContent=japanLeft ? `日本版还需载入 ${japanLeft} 个文件` : '日本版 18 个文件已就绪，请确认';
+        el('continueBtn').textContent='确认日本版配置 →';
+        el('continueBtn').disabled = japanCount !== requirements.length;
+      } else {
+        el('footerNote').textContent=otherLeft ? `S0 配置还需载入 ${otherLeft} 个文件` : '两组配置文件已全部就绪';
+        el('continueBtn').textContent=otherLeft ? '等待S0 配置文件' : '两组文件已就绪 →';
+        el('continueBtn').disabled = otherLeft !== 0;
+      }
+    }
+
+    function confirmJapanFiles(){
+      if(japanConfirmed){
+        if(otherState.size === otherRequirements.length){
+          el('lookupPanel').hidden = false;
+          el('lookupPanel').scrollIntoView({behavior:'smooth', block:'start'});
+          showToast('两组文件已就绪，可以搜索 gacha_id');
+        }
+        return;
+      }
+      if(state.size !== requirements.length){ showToast(`日本版配置还差 ${requirements.length - state.size} 个文件`); return; }
+      japanConfirmed = true;
+      document.querySelectorAll('[data-stage="japan"] .card-input, [data-stage="japan"] .remove, #batchInput').forEach(control => control.disabled = true);
+      el('batchDrop').classList.add('stage-hidden');
+      el('japanStage').classList.add('stage-hidden');
+      el('japanConfirmed').hidden = false;
+      el('otherStage').hidden = false;
+      updateProgress(); updateLookupState();
+      el('otherStage').scrollIntoView({behavior:'smooth', block:'start'});
+      showToast('日本版配置已确认，请载入 S0 配置的 9 个文件');
+    }
+    function showToast(message){ const toast=el('toast'); toast.textContent=message; toast.classList.add('show'); clearTimeout(showToast.timer); showToast.timer=setTimeout(()=>toast.classList.remove('show'),2600); }
+
+    function requireColumns(fileName, columns){
+      const parsed = parsedFiles.get(fileName);
+      if(!parsed) return `${fileName} 尚未载入`;
+      const missing = columns.filter(column => !parsed.headers.includes(column));
+      return missing.length ? `${fileName} 缺少列：${missing.join(', ')}` : '';
+    }
+
+    function fieldValue(row, field){
+      if(!row) return '';
+      if(field === 'bonus_incentive_group_id') return row.bonus_incentive_group_id ?? row.bonus_incentive_group ?? '';
+      if(field === 'extra_redition_group_id') return row.extra_redition_group_id ?? row.extra_rendition_group_id ?? '';
+      return row[field] ?? '';
+    }
+
+    function requireAnyColumn(fileName, columns, label){
+      const parsed = parsedFiles.get(fileName);
+      if(!parsed) return `${fileName} 尚未载入`;
+      return columns.some(column => parsed.headers.includes(column)) ? '' : `${fileName} 缺少列：${label || columns.join(' / ')}`;
+    }
+
+    function ruleSchemaErrors(){
+      return [
+        requireColumns('m_gacha.tsv',['id']),
+        requireColumns('m_gacha.generated.tsv',['id']),
+        (() => {
+          const parsed = otherParsedFiles.get('other:m_gacha.tsv');
+          if(!parsed) return 'S0 m_gacha.tsv 尚未载入';
+          return parsed.headers.includes('id') ? '' : 'S0 m_gacha.tsv 缺少列：id';
+        })()
+      ].filter(Boolean);
+    }
+
+    function updateLookupState(){
+      const ready = el('lookupReady');
+      if(!japanConfirmed){
+        ready.className = 'lookup-ready';
+        ready.textContent = '请先载入并确认全部 18 个日本版配置文件。';
+        return;
+      }
+      const otherMissing = otherRequirements.filter(req => !otherParsedFiles.has(req.storageKey));
+      if(otherMissing.length){
+        ready.className = 'lookup-ready';
+        ready.textContent = `S0 配置还需载入 ${otherMissing.length} 个文件。`;
+        return;
+      }
+      const errors = ruleSchemaErrors();
+      ready.className = errors.length ? 'lookup-ready error' : 'lookup-ready';
+      ready.textContent = errors.length ? errors.join('；') : '两组文件均已就绪。输入 gacha_id 后，将在 JP Original、JP Generated 和 S0 m_gacha.tsv 中查找。';
+      el('lookupPanel').hidden = errors.length > 0;
+    }
+
+    function clearLookupResults(){
+      collectedRows = [];
+      resultHeaders = [];
+      activeGatchId = '';
+      generatedS0Text = '';
+      generatedS0AppealText = '';
+      generatedS0ProductInfoText = '';
+      generatedS0StepupText = '';
+      generatedS0StepupAppealText = '';
+      generatedS0Id = '';
+      el('downloadResultsBtn').disabled = true;
+      el('downloadAppealBtn').disabled = true;
+      el('downloadProductInfoBtn').hidden = true;
+      el('downloadProductInfoBtn').disabled = true;
+      el('downloadStepupBtn').hidden = true;
+      el('downloadStepupBtn').disabled = true;
+      el('downloadStepupTextBtn').hidden = true;
+      el('downloadStepupTextBtn').disabled = true;
+      el('lookupResults').classList.remove('visible');
+      el('resultBody').innerHTML = '';
+      el('resultHead').innerHTML = '';
+      el('resultSummary').innerHTML = '';
+      el('replacePanel').hidden = true;
+      el('replacementIdInput').value = '';
+      const playerType = el('playerType');
+      playerType.textContent = '';
+      playerType.className = 'player-type';
+    }
+
+    function showPlayerType(hasNormal, hasStepup){
+      const playerType = el('playerType');
+      if(hasNormal && hasStepup){
+        playerType.textContent = 'The player is normal player · The player is stepup player';
+        playerType.className = 'player-type visible both';
+      } else if(hasNormal){
+        playerType.textContent = 'The player is normal player';
+        playerType.className = 'player-type visible';
+      } else if(hasStepup){
+        playerType.textContent = 'The player is stepup player';
+        playerType.className = 'player-type visible stepup';
+      } else {
+        playerType.textContent = '';
+        playerType.className = 'player-type';
+      }
+    }
+
+    function collectConfiguration(){
+      clearLookupResults();
+      const gatchId = el('cardIdInput').value;
+      if(gatchId === ''){ showToast('请输入 gacha_id'); el('cardIdInput').focus(); return; }
+      if(!japanConfirmed){ showToast('请先确认日本版配置'); return; }
+      const otherMissing = otherRequirements.filter(req => !otherParsedFiles.has(req.storageKey));
+      if(otherMissing.length){ showToast(`请先完成 S0 配置 9 个文件的载入；当前还差 ${otherMissing.length} 个`); return; }
+      const schemaErrors = ruleSchemaErrors();
+      if(schemaErrors.length){ showToast(schemaErrors[0]); return; }
+
+      const sources = [
+        {key:'jp-original', file:'m_gacha.tsv', label:'JP Original', parsed:parsedFiles.get('m_gacha.tsv')},
+        {key:'jp-generated', file:'m_gacha.generated.tsv', label:'JP Generated', parsed:parsedFiles.get('m_gacha.generated.tsv')},
+        {key:'s0', file:'S0 / m_gacha.tsv', label:'S0 configuration', parsed:otherParsedFiles.get('other:m_gacha.tsv')}
+      ];
+      const matches = sources.flatMap(source => source.parsed.rows
+        .filter(row => row.id === gatchId)
+        .map(row => ({source_key:source.key, source_file:source.file, source_type:source.label, ...row})));
+
+      if(!matches.length){
+        showToast('ID不存在');
+        el('lookupReady').className = 'lookup-ready error';
+        el('lookupReady').textContent = 'ID不存在';
+        return;
+      }
+
+      activeGatchId = gatchId;
+      const sourceHeaders = [...new Set(sources.flatMap(source => source.parsed.headers))];
+      resultHeaders = ['source_file','source_type', ...sourceHeaders];
+      collectedRows = matches;
+      const originalCount = matches.filter(row => row.source_key === 'jp-original').length;
+      const generatedCount = matches.filter(row => row.source_key === 'jp-generated').length;
+      const s0Count = matches.filter(row => row.source_key === 's0').length;
+      el('replacementSource').innerHTML = matches.map((row, index) => `<option value="${index}">${escapeHtml(row.source_type)} · ${escapeHtml(row.source_file)} · 第 ${row._rowNumber} 行</option>`).join('');
+
+      el('lookupReady').className = 'lookup-ready';
+      el('lookupReady').textContent = `gacha_id ${gatchId} 已找到，可输入新 ID 并点击“替换”。`;
+      el('resultSummary').innerHTML = `
+        <div class="summary-title"><strong>gacha_id ${escapeHtml(gatchId)} 的三文件匹配结果</strong><span>共 ${matches.length} 行 · ${resultHeaders.length} 个字段</span></div>
+        <div class="summary-chip"><b>${matches.length}</b><span>匹配记录</span></div>
+        <div class="summary-chip"><b>${originalCount}</b><span>JP Original</span></div>
+        <div class="summary-chip"><b>${generatedCount}</b><span>JP Generated</span></div>
+        <div class="summary-chip"><b>${s0Count}</b><span>S0 m_gacha</span></div>
+        <div class="summary-chip"><b>3</b><span>已检查文件</span></div>`;
+      el('downloadResultsBtn').disabled = true;
+      el('downloadAppealBtn').disabled = true;
+      el('downloadProductInfoBtn').hidden = true;
+      el('downloadProductInfoBtn').disabled = true;
+      el('downloadStepupBtn').hidden = true;
+      el('downloadStepupBtn').disabled = true;
+      el('downloadStepupTextBtn').hidden = true;
+      el('downloadStepupTextBtn').disabled = true;
+      renderResultTable();
+      el('replacePanel').hidden = false;
+      el('lookupResults').classList.add('visible');
+      el('lookupResults').scrollIntoView({behavior:'smooth', block:'nearest'});
+      showToast(`已找到 ${matches.length} 行配置`);
+    }
+
+    function renderResultTable(){
+      el('resultHead').innerHTML = resultHeaders.map(header => `<th scope="col" class="${resultColumnClass(header)}">${escapeHtml(header)}</th>`).join('');
+      el('resultBody').innerHTML = collectedRows.map(row => `<tr>${resultHeaders.map(key => `<td class="${resultColumnClass(key)}">${resultCell(row[key])}</td>`).join('')}</tr>`).join('');
+    }
+
+    function replaceGatchId(){
+      const replacementId = el('replacementIdInput').value;
+      if(!activeGatchId || !collectedRows.length){ showToast('请先查找有效的 gacha_id'); return; }
+      if(replacementId === ''){ showToast('请输入新的 gacha_id'); el('replacementIdInput').focus(); return; }
+      if(replacementId === activeGatchId){ showToast('新的 gacha_id 不能与原 ID 相同'); return; }
+
+      const allSourceRows = [
+        ...parsedFiles.get('m_gacha.tsv').rows,
+        ...parsedFiles.get('m_gacha.generated.tsv').rows,
+        ...otherParsedFiles.get('other:m_gacha.tsv').rows
+      ];
+      if(allSourceRows.some(row => row.id === replacementId)){
+        showToast(`新的 gacha_id ${replacementId} 已存在`);
+        return;
+      }
+
+      const sourceIndex = Number(el('replacementSource').value);
+      const selected = collectedRows[sourceIndex];
+      if(!selected){ showToast('请选择要复制的来源记录'); return; }
+      const s0Parsed = otherParsedFiles.get('other:m_gacha.tsv');
+      const appendedRow = Object.fromEntries(s0Parsed.headers.map(header => [header, header === 'id' ? replacementId : (selected[header] ?? '')]));
+      const originalItem = otherState.get('other:m_gacha.tsv');
+      generatedS0Text = appendRowsToTsv(originalItem?.text ?? '', s0Parsed.headers, [appendedRow]);
+
+      const appealSources = [
+        {file:'m_gacha_appeal_image.tsv', label:'JP Original', parsed:parsedFiles.get('m_gacha_appeal_image.tsv')},
+        {file:'m_gacha_appeal_image.generated.tsv', label:'JP Generated', parsed:parsedFiles.get('m_gacha_appeal_image.generated.tsv')},
+        {file:'S0 / m_gacha_appeal_image.tsv', label:'S0 configuration', parsed:otherParsedFiles.get('other:m_gacha_appeal_image.tsv')}
+      ];
+      const appealMatches = appealSources.flatMap(source => source.parsed.rows
+        .filter(row => row.gacha_id === activeGatchId)
+        .map(row => ({source_file:source.file, source_type:source.label, ...row})));
+      const s0AppealParsed = otherParsedFiles.get('other:m_gacha_appeal_image.tsv');
+      const appealRowsToAppend = appealMatches.map(sourceRow => Object.fromEntries(
+        s0AppealParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+      ));
+      const s0AppealItem = otherState.get('other:m_gacha_appeal_image.tsv');
+      generatedS0AppealText = appendRowsToTsv(s0AppealItem?.text ?? '', s0AppealParsed.headers, appealRowsToAppend);
+
+      const functionType = String(selected.function_type ?? '').trim().toLowerCase();
+      const isNormal = functionType === 'normal';
+      const isStepup = functionType === 'stepup';
+      let productInfoMatches = [];
+      if(isNormal){
+        const productInfoSources = [
+          {file:'m_gacha_product_info.tsv', parsed:parsedFiles.get('m_gacha_product_info.tsv')},
+          {file:'m_gacha_product_info.generated.tsv', parsed:parsedFiles.get('m_gacha_product_info.generated.tsv')},
+          {file:'S0 / m_gacha_product_info.tsv', parsed:otherParsedFiles.get('other:m_gacha_product_info.tsv')}
+        ];
+        productInfoMatches = productInfoSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        const s0ProductInfoParsed = otherParsedFiles.get('other:m_gacha_product_info.tsv');
+        const productInfoRowsToAppend = productInfoMatches.map(sourceRow => Object.fromEntries(
+          s0ProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+        ));
+        generatedS0ProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_product_info.tsv')?.text ?? '', s0ProductInfoParsed.headers, productInfoRowsToAppend);
+      } else {
+        generatedS0ProductInfoText = '';
+      }
+
+      let stepupMatches = [];
+      let stepupAppealMatches = [];
+      if(isStepup){
+        const stepupSources = [
+          {file:'m_gacha_stepup.tsv', parsed:parsedFiles.get('m_gacha_stepup.tsv')},
+          {file:'m_gacha_stepup.generated.tsv', parsed:parsedFiles.get('m_gacha_stepup.generated.tsv')},
+          {file:'S0 / m_gacha_stepup.tsv', parsed:otherParsedFiles.get('other:m_gacha_stepup.tsv')}
+        ];
+        stepupMatches = stepupSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        const s0StepupParsed = otherParsedFiles.get('other:m_gacha_stepup.tsv');
+        const stepupRowsToAppend = stepupMatches.map(sourceRow => Object.fromEntries(
+          s0StepupParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+        ));
+        generatedS0StepupText = appendRowsToTsv(otherState.get('other:m_gacha_stepup.tsv')?.text ?? '', s0StepupParsed.headers, stepupRowsToAppend);
+
+        const stepupAppealSources = [
+          {file:'m_gacha_stepup_appeal_text.tsv', parsed:parsedFiles.get('m_gacha_stepup_appeal_text.tsv')},
+          {file:'m_gacha_stepup_appeal_text.generated.tsv', parsed:parsedFiles.get('m_gacha_stepup_appeal_text.generated.tsv')},
+          {file:'S0 / m_gacha_stepup_appeal_text.tsv', parsed:otherParsedFiles.get('other:m_gacha_stepup_appeal_text.tsv')}
+        ];
+        stepupAppealMatches = stepupAppealSources.flatMap(source => source.parsed.rows.filter(row => row.gacha_id === activeGatchId));
+        const s0StepupAppealParsed = otherParsedFiles.get('other:m_gacha_stepup_appeal_text.tsv');
+        const stepupAppealRowsToAppend = stepupAppealMatches.map(sourceRow => Object.fromEntries(
+          s0StepupAppealParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+        ));
+        generatedS0StepupAppealText = appendRowsToTsv(otherState.get('other:m_gacha_stepup_appeal_text.tsv')?.text ?? '', s0StepupAppealParsed.headers, stepupAppealRowsToAppend);
+      } else {
+        generatedS0StepupText = '';
+        generatedS0StepupAppealText = '';
+      }
+      generatedS0Id = replacementId;
+
+      const previewRow = {source_key:'s0-new', source_file:'S0 / m_gacha.tsv (new row)', source_type:`Copied from ${selected.source_type}`, ...appendedRow};
+      collectedRows = [...collectedRows, previewRow];
+      renderResultTable();
+      el('resultSummary').querySelector('.summary-title strong').textContent = `gacha_id ${activeGatchId} → ${replacementId} · S0 新增行预览`;
+      el('lookupReady').className = 'lookup-ready';
+      const productInfoMessage = isNormal ? `；product info ${productInfoMatches.length} 行` : '';
+      const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行` : '';
+      el('lookupReady').textContent = `已追加 m_gacha 1 行与 appeal image ${appealMatches.length} 行${productInfoMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
+      el('replacementIdInput').value = '';
+      el('downloadResultsBtn').disabled = false;
+      el('downloadAppealBtn').disabled = false;
+      el('downloadProductInfoBtn').hidden = !isNormal;
+      el('downloadProductInfoBtn').disabled = !isNormal;
+      el('downloadStepupBtn').hidden = !isStepup;
+      el('downloadStepupBtn').disabled = !isStepup;
+      el('downloadStepupTextBtn').hidden = !isStepup;
+      el('downloadStepupTextBtn').disabled = !isStepup;
+      const generatedFileCount = 2 + (isNormal ? 1 : 0) + (isStepup ? 2 : 0);
+      showToast(`已生成 ${generatedFileCount} 个新的 S0 TSV 文件`);
+    }
+
+    function sourceTsvCell(value){
+      return String(value ?? '').replace(/[\t\r\n]/g, ' ');
+    }
+
+    function appendRowsToTsv(sourceText, headers, rows){
+      const lineEnding = sourceText.includes('\r\n') ? '\r\n' : '\n';
+      const cleanSource = sourceText.replace(/[\r\n]+$/, '');
+      if(!rows.length) return `${cleanSource}${lineEnding}`;
+      const appendedLines = rows.map(row => headers.map(header => sourceTsvCell(row[header])).join('\t')).join(lineEnding);
+      return `${cleanSource}${lineEnding}${appendedLines}${lineEnding}`;
+    }
+
+    function downloadTsv(text, filename, successMessage){
+      if(!text){ showToast('请先点击“替换并生成”'); return; }
+      const blob = new Blob([text], {type:'text/tab-separated-values;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      showToast(successMessage);
+    }
+
+    function downloadCollectedTsv(){
+      downloadTsv(generatedS0Text, 'm_gacha.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha.tsv`);
+    }
+
+    function downloadAppealTsv(){
+      downloadTsv(generatedS0AppealText, 'm_gacha_appeal_image.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_appeal_image.tsv`);
+    }
+
+    function downloadProductInfoTsv(){
+      downloadTsv(generatedS0ProductInfoText, 'm_gacha_product_info.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_product_info.tsv`);
+    }
+
+    function downloadStepupTsv(){
+      downloadTsv(generatedS0StepupText, 'm_gacha_stepup.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_stepup.tsv`);
+    }
+
+    function downloadStepupAppealTsv(){
+      downloadTsv(generatedS0StepupAppealText, 'm_gacha_stepup_appeal_text.tsv', `已下载包含新 gacha_id ${generatedS0Id} 的 m_gacha_stepup_appeal_text.tsv`);
+    }
+
+    el('batchInput').addEventListener('change', async e => {
+      if(japanConfirmed){ e.target.value=''; return; }
+      let matched=0, unmatched=[];
+      for(const file of e.target.files){ const req=findRequirement(file.name,'japan'); if(req){ await assignFile(req,file); matched++; } else unmatched.push(file.name); }
+      showToast(unmatched.length ? `日本版已匹配 ${matched} 个；${unmatched.length} 个文件名未识别` : `日本版已自动匹配 ${matched} 个文件`);
+      e.target.value='';
+    });
+    const batch=el('batchDrop');
+    ['dragenter','dragover'].forEach(type=>batch.addEventListener(type,e=>{e.preventDefault();batch.classList.add('dragging');}));
+    ['dragleave','drop'].forEach(type=>batch.addEventListener(type,e=>{e.preventDefault();batch.classList.remove('dragging');}));
+    batch.addEventListener('drop', async e=>{
+      if(japanConfirmed) return;
+      let matched=0, unmatched=[];
+      for(const file of e.dataTransfer.files){ const req=findRequirement(file.name,'japan'); if(req){await assignFile(req,file);matched++;}else unmatched.push(file.name); }
+      showToast(unmatched.length ? `日本版已匹配 ${matched} 个；${unmatched.length} 个文件名未识别` : `日本版已自动匹配 ${matched} 个文件`);
+    });
+
+    async function handleOtherBatch(files){
+      let matched=0, unmatched=[];
+      for(const file of files){ const req=findRequirement(file.name,'other'); if(req){ await assignFile(req,file); matched++; } else unmatched.push(file.name); }
+      showToast(unmatched.length ? `S0 配置已匹配 ${matched} 个；${unmatched.length} 个文件名未识别` : `S0 配置已自动匹配 ${matched} 个文件`);
+    }
+    el('otherBatchInput').addEventListener('change', async e => { await handleOtherBatch(e.target.files); e.target.value=''; });
+    const otherBatch=el('otherBatchDrop');
+    ['dragenter','dragover'].forEach(type=>otherBatch.addEventListener(type,e=>{e.preventDefault();otherBatch.classList.add('dragging');}));
+    ['dragleave','drop'].forEach(type=>otherBatch.addEventListener(type,e=>{e.preventDefault();otherBatch.classList.remove('dragging');}));
+    otherBatch.addEventListener('drop', e=>handleOtherBatch(e.dataTransfer.files));
+    el('resetBtn').addEventListener('click',()=>{
+      if((!state.size && !otherState.size) || confirm('清除日本版与S0 配置的全部文件？')){
+        state.clear(); parsedFiles.clear(); otherState.clear(); otherParsedFiles.clear(); japanConfirmed=false;
+        allRequirements.forEach(r=>{const key=r.storageKey||r.name;const i=document.querySelector(`[data-expected="${key}"] input`);i.value='';i.disabled=false;updateCard(r);});
+        document.querySelectorAll('[data-stage="japan"] .remove').forEach(button => button.disabled=false);
+        el('batchInput').disabled=false; el('batchDrop').classList.remove('stage-hidden'); el('japanStage').classList.remove('stage-hidden');
+        el('japanConfirmed').hidden=true; el('otherStage').hidden=true; el('lookupPanel').hidden=true;
+        updateProgress();updateLookupState();clearLookupResults();showToast('已清除两组配置文件');
+      }
+    });
+    el('continueBtn').addEventListener('click',confirmJapanFiles);
+    el('lookupBtn').addEventListener('click', collectConfiguration);
+    el('cardIdInput').addEventListener('keydown', event => { if(event.key === 'Enter') collectConfiguration(); });
+    el('cardIdInput').addEventListener('input', clearLookupResults);
+    el('replacementIdInput').addEventListener('keydown', event => { if(event.key === 'Enter') replaceGatchId(); });
+    el('replaceIdBtn').addEventListener('click', replaceGatchId);
+    el('downloadResultsBtn').addEventListener('click', downloadCollectedTsv);
+    el('downloadAppealBtn').addEventListener('click', downloadAppealTsv);
+    el('downloadProductInfoBtn').addEventListener('click', downloadProductInfoTsv);
+    el('downloadStepupBtn').addEventListener('click', downloadStepupTsv);
+    el('downloadStepupTextBtn').addEventListener('click', downloadStepupAppealTsv);
+
+    renderCards(); updateProgress(); updateLookupState();
+  </script>
+</body>
+</html>
