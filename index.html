@@ -505,8 +505,7 @@
       return pool.find(r => normalized(r.name) === n || (r.aliases || []).some(a => normalized(a) === n));
     }
 
-    async function parseTsv(file){
-      const text = await file.text();
+    function parseTsvText(text){
       const clean = text.replace(/^﻿/, '');
       const lines = clean.split(/\r\n|\n|\r/).filter((line,i,a) => !(i===a.length-1 && line===''));
       const headers = lines.length ? lines[0].split('\t') : [];
@@ -517,6 +516,10 @@
         return row;
       });
       return {headers, rows};
+    }
+
+    async function parseTsv(file){
+      return parseTsvText(await file.text());
     }
 
     async function inspect(file){
@@ -716,10 +719,23 @@
       const functionType = String(row.function_type ?? '').trim().toLowerCase();
       let parsed;
       if(functionType === 'normal'){
-        parsed = row.source_key === 's0'
+        const normalParsed = row.source_key === 's0'
           ? otherParsedFiles.get('other:m_gacha_normal.tsv')
           : parsedFiles.get(row.source_key === 'jp-generated' ? 'm_gacha_normal.generated.tsv' : 'm_gacha_normal.tsv');
-      } else if(functionType === 'stepup'){
+        const productInfoParsed = row.source_key === 's0'
+          ? otherParsedFiles.get('other:m_gacha_product_info.tsv')
+          : parsedFiles.get(row.source_key === 'jp-generated' ? 'm_gacha_product_info.generated.tsv' : 'm_gacha_product_info.tsv');
+        const normalRows = normalParsed?.rows.filter(item => item.gacha_id === row.id) ?? [];
+        const productInfoRows = productInfoParsed?.rows.filter(item => item.gacha_id === row.id) ?? [];
+        const joinedValues = (rows, field) => [...new Set(rows
+          .map(item => String(item[field] ?? '').trim())
+          .filter(value => value && value.toLowerCase() !== 'null'))].join(', ');
+        return {
+          lot_id: joinedValues(normalRows, 'lot_id'),
+          assurance_lot_id: joinedValues(productInfoRows, 'assurance_lot_id')
+        };
+      }
+      if(functionType === 'stepup'){
         parsed = row.source_key === 's0'
           ? otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv')
           : parsedFiles.get(row.source_key === 'jp-generated' ? 'm_gacha_stepup_product_info.generated.tsv' : 'm_gacha_stepup_product_info.tsv');
@@ -727,10 +743,10 @@
       const relatedRows = parsed?.rows.filter(item => item.gacha_id === row.id) ?? [];
       const joinedValues = field => [...new Set(relatedRows
         .map(item => String(item[field] ?? '').trim())
-        .filter(Boolean))].join(', ');
+        .filter(value => value && value.toLowerCase() !== 'null'))].join(', ');
       return {
         lot_id: joinedValues('lot_id'),
-        assurance_lot_id: functionType === 'stepup' ? joinedValues('assurance_lot_id') : ''
+        assurance_lot_id: joinedValues('assurance_lot_id')
       };
     }
 
@@ -772,7 +788,7 @@
       const sourceHeaders = [...new Set(sources.flatMap(source => source.parsed.headers))];
       resultHeaders = ['source_file','source_type', ...sourceHeaders];
       if(!resultHeaders.includes('lot_id')) resultHeaders.push('lot_id');
-      if(activePlayerFunctionType === 'stepup' && !resultHeaders.includes('assurance_lot_id')) resultHeaders.push('assurance_lot_id');
+      if(!resultHeaders.includes('assurance_lot_id')) resultHeaders.push('assurance_lot_id');
       collectedRows = matches.map(row => ({...row, ...relatedLotInfo(row)}));
       const originalCount = matches.filter(row => row.source_key === 'jp-original').length;
       const generatedCount = matches.filter(row => row.source_key === 'jp-generated').length;
@@ -912,7 +928,11 @@
         ));
         generatedS0ProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_product_info.tsv')?.text ?? '', s0ProductInfoParsed.headers, productInfoRowsToAppend);
 
-        const lotIds = [...new Set(normalRowsToAppend.map(row => String(row.lot_id ?? '')).filter(Boolean))];
+        const normalLotIds = normalRowsToAppend.map(row => row.lot_id);
+        const assuranceLotIds = productInfoRowsToAppend.map(row => row.assurance_lot_id);
+        const lotIds = [...new Set([...normalLotIds, ...assuranceLotIds]
+          .map(value => String(value ?? '').trim())
+          .filter(value => value && value.toLowerCase() !== 'null'))];
         const s0LotParsed = otherParsedFiles.get('other:m_gacha_lot.tsv');
         const existingS0LotIds = new Set(s0LotParsed.rows.map(row => String(row.id ?? '')));
         const missingLotIds = lotIds.filter(lotId => !existingS0LotIds.has(lotId));
@@ -993,6 +1013,7 @@
         generatedS0StepupProductInfoText = '';
       }
       generatedS0Id = replacementId;
+      persistGeneratedOutputs(isNormal, isStepup);
 
       const previewRow = {
         source_key:'s0-new',
@@ -1038,6 +1059,33 @@
       if(!rows.length) return `${cleanSource}${lineEnding}`;
       const appendedLines = rows.map(row => headers.map(header => sourceTsvCell(row[header])).join('\t')).join(lineEnding);
       return `${cleanSource}${lineEnding}${appendedLines}${lineEnding}`;
+    }
+
+    function persistOutput(storageKey, text){
+      if(!text) return;
+      const parsed = parseTsvText(text);
+      const current = otherState.get(storageKey) ?? {};
+      otherParsedFiles.set(storageKey, parsed);
+      otherState.set(storageKey, {
+        ...current,
+        text,
+        info:{...(current.info ?? {}), rows:parsed.rows.length, columns:parsed.headers.length, parsed}
+      });
+    }
+
+    function persistGeneratedOutputs(isNormal, isStepup){
+      persistOutput('other:m_gacha.tsv', generatedS0Text);
+      persistOutput('other:m_gacha_appeal_image.tsv', generatedS0AppealText);
+      persistOutput('other:m_gacha_lot.tsv', generatedS0LotText);
+      if(isNormal){
+        persistOutput('other:m_gacha_normal.tsv', generatedS0NormalText);
+        persistOutput('other:m_gacha_product_info.tsv', generatedS0ProductInfoText);
+      }
+      if(isStepup){
+        persistOutput('other:m_gacha_stepup.tsv', generatedS0StepupText);
+        persistOutput('other:m_gacha_stepup_appeal_text.tsv', generatedS0StepupAppealText);
+        persistOutput('other:m_gacha_stepup_product_info.tsv', generatedS0StepupProductInfoText);
+      }
     }
 
     function downloadTsv(text, filename, successMessage){
