@@ -753,7 +753,9 @@
       const playerType = el('playerType');
       const functionLabel = functionType === 'stepup'
         ? 'Stepup Player'
-        : functionType === 'normal' ? 'Normal Player' : '';
+        : functionType === 'normal'
+          ? 'Normal Player'
+          : functionType === 'select' ? 'Select Player' : '';
       if(characterType === 'reissue'){
         playerType.textContent = ['复刻角色', functionLabel].filter(Boolean).join(' · ');
         playerType.className = 'player-type visible reissue';
@@ -991,6 +993,8 @@
       const isStepup = functionType === 'stepup';
       let normalMatches = [];
       let productInfoMatches = [];
+      let productInfoRowsToAppend = [];
+      let directPrizeGroupIds = [];
       let lotRowsToAppend = [];
       if(isNormal){
         const normalSources = [
@@ -1012,10 +1016,13 @@
         ];
         productInfoMatches = rowsByCopyPriority(productInfoSources, 'gacha_id', activeGatchId);
         const s0ProductInfoParsed = otherParsedFiles.get('other:m_gacha_product_info.tsv');
-        const productInfoRowsToAppend = productInfoMatches.map(sourceRow => Object.fromEntries(
+        productInfoRowsToAppend = productInfoMatches.map(sourceRow => Object.fromEntries(
           s0ProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
         ));
         generatedS0ProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_product_info.tsv')?.text ?? '', s0ProductInfoParsed.headers, productInfoRowsToAppend);
+        directPrizeGroupIds = productInfoRowsToAppend
+          .filter(row => String(row.resource_type ?? '').trim().toLowerCase().includes('gacha_ticket'))
+          .map(row => row.resource_id);
 
         const normalLotIds = normalRowsToAppend.map(row => row.lot_id);
         const assuranceLotIds = productInfoRowsToAppend.map(row => row.assurance_lot_id);
@@ -1103,8 +1110,11 @@
       }
       const s0LotParsedForPrize = otherParsedFiles.get('other:m_gacha_lot.tsv');
       const newLotRows = parseTsvText(generatedS0LotText).rows.slice(s0LotParsedForPrize.rows.length);
-      const newGroupIds = [...new Set(newLotRows
-        .map(row => String(row.group_id ?? '').trim())
+      const newGroupIds = [...new Set([
+        ...newLotRows.map(row => row.group_id),
+        ...directPrizeGroupIds
+      ]
+        .map(value => String(value ?? '').trim())
         .filter(value => value && value.toLowerCase() !== 'null'))];
       const s0PrizeParsed = otherParsedFiles.get('other:m_gacha_prize.tsv');
       const existingS0PrizeGroupIds = new Set(s0PrizeParsed.rows.map(row => String(row.group_id ?? '').trim()));
@@ -1143,8 +1153,9 @@
       el('lookupReady').className = 'lookup-ready';
       const normalMessage = isNormal ? `；normal ${normalMatches.length} 行；product info ${productInfoMatches.length} 行；lot 新增 ${lotRowsToAppend.length} 行` : '';
       const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行；stepup product info ${stepupProductInfoMatches.length} 行；lot 新增 ${stepupLotRowsToAppend.length} 行` : '';
+      const directPrizeMessage = directPrizeGroupIds.length ? `；ticket prize group ${[...new Set(directPrizeGroupIds)].length} 个` : '';
       const prizeMessage = `；prize 新增 ${prizeRowsToAppend.length} 行`;
-      el('lookupReady').textContent = `已追加 m_gacha ${masterRowsToAppend.length} 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}${prizeMessage}。新 gacha_id：${replacementId}。`;
+      el('lookupReady').textContent = `已追加 m_gacha ${masterRowsToAppend.length} 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}${directPrizeMessage}${prizeMessage}。新 gacha_id：${replacementId}。`;
       el('replacementIdInput').value = '';
       el('downloadResultsBtn').disabled = false;
       el('downloadAppealBtn').disabled = false;
