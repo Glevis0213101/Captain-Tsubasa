@@ -388,7 +388,7 @@
             <div class="field"><label for="replacementIdInput">新的 gacha_id</label><input id="replacementIdInput" type="text" inputmode="numeric" autocomplete="off" placeholder="输入新的 gacha_id"><small>将复制所选来源行，只修改 ID，并追加到对应 S0 TSV 底部。</small></div>
             <button class="btn primary" id="replaceIdBtn" type="button">替换并生成</button>
           </div>
-          <div class="result-actions"><button class="btn" id="downloadResultsBtn" type="button" disabled>下载新的 S0 m_gacha.tsv</button><button class="btn" id="downloadAppealBtn" type="button" disabled>下载新的 S0 m_gacha_appeal_image.tsv</button><button class="btn" id="downloadProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_product_info.tsv</button><button class="btn" id="downloadNormalBtn" type="button" hidden disabled>下载新的 S0 m_gacha_normal.tsv</button><button class="btn" id="downloadLotBtn" type="button" hidden disabled>下载新的 S0 m_gacha_lot.tsv</button><button class="btn" id="downloadStepupBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup.tsv</button><button class="btn" id="downloadStepupTextBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_appeal_text.tsv</button><button class="btn" id="downloadStepupProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_product_info.tsv</button></div>
+          <div class="result-actions"><button class="btn" id="downloadResultsBtn" type="button" disabled>下载新的 S0 m_gacha.tsv</button><button class="btn" id="downloadAppealBtn" type="button" disabled>下载新的 S0 m_gacha_appeal_image.tsv</button><button class="btn" id="downloadProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_product_info.tsv</button><button class="btn" id="downloadNormalBtn" type="button" hidden disabled>下载新的 S0 m_gacha_normal.tsv</button><button class="btn" id="downloadLotBtn" type="button" hidden disabled>下载新的 S0 m_gacha_lot.tsv</button><button class="btn" id="downloadPrizeBtn" type="button" hidden disabled>下载新的 S0 m_gacha_prize.tsv</button><button class="btn" id="downloadStepupBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup.tsv</button><button class="btn" id="downloadStepupTextBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_appeal_text.tsv</button><button class="btn" id="downloadStepupProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_product_info.tsv</button></div>
         </div>
       </section>
     </main>
@@ -436,6 +436,7 @@
     let generatedS0ProductInfoText = '';
     let generatedS0NormalText = '';
     let generatedS0LotText = '';
+    let generatedS0PrizeText = '';
     let generatedS0StepupText = '';
     let generatedS0StepupAppealText = '';
     let generatedS0StepupProductInfoText = '';
@@ -669,6 +670,7 @@
       generatedS0ProductInfoText = '';
       generatedS0NormalText = '';
       generatedS0LotText = '';
+      generatedS0PrizeText = '';
       generatedS0StepupText = '';
       generatedS0StepupAppealText = '';
       generatedS0StepupProductInfoText = '';
@@ -681,6 +683,8 @@
       el('downloadNormalBtn').disabled = true;
       el('downloadLotBtn').hidden = true;
       el('downloadLotBtn').disabled = true;
+      el('downloadPrizeBtn').hidden = true;
+      el('downloadPrizeBtn').disabled = true;
       el('downloadStepupBtn').hidden = true;
       el('downloadStepupBtn').disabled = true;
       el('downloadStepupTextBtn').hidden = true;
@@ -824,6 +828,8 @@
       el('downloadNormalBtn').disabled = true;
       el('downloadLotBtn').hidden = true;
       el('downloadLotBtn').disabled = true;
+      el('downloadPrizeBtn').hidden = true;
+      el('downloadPrizeBtn').disabled = true;
       el('downloadStepupBtn').hidden = true;
       el('downloadStepupBtn').disabled = true;
       el('downloadStepupTextBtn').hidden = true;
@@ -1012,6 +1018,28 @@
         generatedS0StepupAppealText = '';
         generatedS0StepupProductInfoText = '';
       }
+      const s0LotParsedForPrize = otherParsedFiles.get('other:m_gacha_lot.tsv');
+      const newLotRows = parseTsvText(generatedS0LotText).rows.slice(s0LotParsedForPrize.rows.length);
+      const newGroupIds = [...new Set(newLotRows
+        .map(row => String(row.group_id ?? '').trim())
+        .filter(value => value && value.toLowerCase() !== 'null'))];
+      const s0PrizeParsed = otherParsedFiles.get('other:m_gacha_prize.tsv');
+      const existingS0PrizeGroupIds = new Set(s0PrizeParsed.rows.map(row => String(row.group_id ?? '').trim()));
+      const missingPrizeGroupIds = newGroupIds.filter(groupId => !existingS0PrizeGroupIds.has(groupId));
+      const jpPrizeSources = [
+        {file:'m_gacha_prize.tsv', parsed:parsedFiles.get('m_gacha_prize.tsv')},
+        {file:'m_gacha_prize.generated.tsv', parsed:parsedFiles.get('m_gacha_prize.generated.tsv')}
+      ];
+      const sourcePrizeRows = missingPrizeGroupIds.flatMap(groupId => rowsByCopyPriority(jpPrizeSources, 'group_id', groupId));
+      const prizeRowsToAppend = sourcePrizeRows.map(sourceRow => Object.fromEntries(
+        s0PrizeParsed.headers.map(header => [header, sourceRow[header] ?? ''])
+      ));
+      generatedS0PrizeText = appendRowsToTsv(
+        otherState.get('other:m_gacha_prize.tsv')?.text ?? '',
+        s0PrizeParsed.headers,
+        prizeRowsToAppend
+      );
+
       generatedS0Id = replacementId;
       persistGeneratedOutputs(isNormal, isStepup);
 
@@ -1029,7 +1057,8 @@
       el('lookupReady').className = 'lookup-ready';
       const normalMessage = isNormal ? `；normal ${normalMatches.length} 行；product info ${productInfoMatches.length} 行；lot 新增 ${lotRowsToAppend.length} 行` : '';
       const stepupMessage = isStepup ? `；stepup ${stepupMatches.length} 行；stepup appeal text ${stepupAppealMatches.length} 行；stepup product info ${stepupProductInfoMatches.length} 行；lot 新增 ${stepupLotRowsToAppend.length} 行` : '';
-      el('lookupReady').textContent = `已追加 m_gacha ${masterRowsToAppend.length} 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}。新 gacha_id：${replacementId}。`;
+      const prizeMessage = `；prize 新增 ${prizeRowsToAppend.length} 行`;
+      el('lookupReady').textContent = `已追加 m_gacha ${masterRowsToAppend.length} 行与 appeal image ${appealMatches.length} 行${normalMessage}${stepupMessage}${prizeMessage}。新 gacha_id：${replacementId}。`;
       el('replacementIdInput').value = '';
       el('downloadResultsBtn').disabled = false;
       el('downloadAppealBtn').disabled = false;
@@ -1039,13 +1068,15 @@
       el('downloadNormalBtn').disabled = !isNormal;
       el('downloadLotBtn').hidden = !(isNormal || isStepup);
       el('downloadLotBtn').disabled = !(isNormal || isStepup);
+      el('downloadPrizeBtn').hidden = !(isNormal || isStepup);
+      el('downloadPrizeBtn').disabled = !(isNormal || isStepup);
       el('downloadStepupBtn').hidden = !isStepup;
       el('downloadStepupBtn').disabled = !isStepup;
       el('downloadStepupTextBtn').hidden = !isStepup;
       el('downloadStepupTextBtn').disabled = !isStepup;
       el('downloadStepupProductInfoBtn').hidden = !isStepup;
       el('downloadStepupProductInfoBtn').disabled = !isStepup;
-      const generatedFileCount = 2 + (isNormal ? 3 : 0) + (isStepup ? 4 : 0);
+      const generatedFileCount = 3 + (isNormal ? 3 : 0) + (isStepup ? 4 : 0);
       showToast(`已生成 ${generatedFileCount} 个新的 S0 TSV 文件`);
     }
 
@@ -1077,6 +1108,7 @@
       persistOutput('other:m_gacha.tsv', generatedS0Text);
       persistOutput('other:m_gacha_appeal_image.tsv', generatedS0AppealText);
       persistOutput('other:m_gacha_lot.tsv', generatedS0LotText);
+      persistOutput('other:m_gacha_prize.tsv', generatedS0PrizeText);
       if(isNormal){
         persistOutput('other:m_gacha_normal.tsv', generatedS0NormalText);
         persistOutput('other:m_gacha_product_info.tsv', generatedS0ProductInfoText);
@@ -1117,6 +1149,10 @@
 
     function downloadLotTsv(){
       downloadTsv(generatedS0LotText, 'm_gacha_lot.tsv', `已下载当前配置所需的 m_gacha_lot.tsv`);
+    }
+
+    function downloadPrizeTsv(){
+      downloadTsv(generatedS0PrizeText, 'm_gacha_prize.tsv', '已下载当前配置所需的 m_gacha_prize.tsv');
     }
 
     function downloadStepupTsv(){
@@ -1179,6 +1215,7 @@
     el('downloadProductInfoBtn').addEventListener('click', downloadProductInfoTsv);
     el('downloadNormalBtn').addEventListener('click', downloadNormalTsv);
     el('downloadLotBtn').addEventListener('click', downloadLotTsv);
+    el('downloadPrizeBtn').addEventListener('click', downloadPrizeTsv);
     el('downloadStepupBtn').addEventListener('click', downloadStepupTsv);
     el('downloadStepupTextBtn').addEventListener('click', downloadStepupAppealTsv);
     el('downloadStepupProductInfoBtn').addEventListener('click', downloadStepupProductInfoTsv);
