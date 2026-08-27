@@ -963,6 +963,14 @@
       const sourceIndex = Number(el('replacementSource').value);
       const selected = collectedRows[sourceIndex];
       if(!selected){ showToast('请选择要复制的来源记录'); return; }
+      const functionType = String(activePlayerFunctionType || selected.function_type || '').trim().toLowerCase();
+      const isNormal = functionType === 'normal';
+      const isStepup = functionType === 'stepup';
+      const isSelect = functionType === 'select';
+      if(!isNormal && !isStepup && !isSelect){
+        showToast(`不支持的 function_type：${functionType || '空值'}`);
+        return;
+      }
       const generationSnapshot = snapshotS0Outputs();
       const s0Parsed = otherParsedFiles.get('other:m_gacha.tsv');
       const masterSourceRows = activeCharacterType === 'reissue'
@@ -988,10 +996,6 @@
       const s0AppealItem = otherState.get('other:m_gacha_appeal_image.tsv');
       generatedS0AppealText = appendRowsToTsv(s0AppealItem?.text ?? '', s0AppealParsed.headers, appealRowsToAppend);
 
-      const functionType = String(selected.function_type ?? '').trim().toLowerCase();
-      const isNormal = functionType === 'normal';
-      const isStepup = functionType === 'stepup';
-      const isSelect = functionType === 'select';
       let normalMatches = [];
       let productInfoMatches = [];
       let productInfoRowsToAppend = [];
@@ -1115,9 +1119,9 @@
         generatedS0StepupProductInfoText = '';
       }
       const s0LotParsedForPrize = otherParsedFiles.get('other:m_gacha_lot.tsv');
-      const newLotRows = parseTsvText(generatedS0LotText).rows.slice(s0LotParsedForPrize.rows.length);
+      const newlyAddedLotRows = [...lotRowsToAppend, ...stepupLotRowsToAppend];
       const newGroupIds = [...new Set([
-        ...newLotRows.map(row => row.group_id),
+        ...newlyAddedLotRows.map(row => row.group_id),
         ...directPrizeGroupIds
       ]
         .map(value => String(value ?? '').trim())
@@ -1179,7 +1183,12 @@
       el('downloadStepupTextBtn').disabled = !isStepup;
       el('downloadStepupProductInfoBtn').hidden = !isStepup;
       el('downloadStepupProductInfoBtn').disabled = !isStepup;
-      const generatedFileCount = 3 + (isNormal ? 3 : 0) + (isStepup ? 4 : 0) + (isSelect ? 1 : 0);
+      const generatedFileCount = 2
+        + (isNormal || isSelect ? 1 : 0)
+        + (isNormal ? 1 : 0)
+        + (isStepup ? 3 : 0)
+        + (isNormal || isStepup ? 1 : 0)
+        + (isNormal || isStepup || isSelect ? 1 : 0);
       showToast(`已生成 ${generatedFileCount} 个新的 S0 TSV 文件`);
     }
 
