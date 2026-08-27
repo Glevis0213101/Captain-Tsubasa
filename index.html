@@ -991,23 +991,29 @@
       const functionType = String(selected.function_type ?? '').trim().toLowerCase();
       const isNormal = functionType === 'normal';
       const isStepup = functionType === 'stepup';
+      const isSelect = functionType === 'select';
       let normalMatches = [];
       let productInfoMatches = [];
       let productInfoRowsToAppend = [];
       let directPrizeGroupIds = [];
       let lotRowsToAppend = [];
-      if(isNormal){
+      if(isNormal || isSelect){
         const normalSources = [
           {file:'m_gacha_normal.tsv', parsed:parsedFiles.get('m_gacha_normal.tsv')},
           {file:'m_gacha_normal.generated.tsv', parsed:parsedFiles.get('m_gacha_normal.generated.tsv')},
           {file:'S0 / m_gacha_normal.tsv', parsed:otherParsedFiles.get('other:m_gacha_normal.tsv')}
         ];
-        normalMatches = rowsByCopyPriority(normalSources, 'gacha_id', activeGatchId);
         const s0NormalParsed = otherParsedFiles.get('other:m_gacha_normal.tsv');
-        const normalRowsToAppend = normalMatches.map(sourceRow => Object.fromEntries(
-          s0NormalParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
-        ));
-        generatedS0NormalText = appendRowsToTsv(otherState.get('other:m_gacha_normal.tsv')?.text ?? '', s0NormalParsed.headers, normalRowsToAppend);
+        let normalRowsToAppend = [];
+        if(isNormal){
+          normalMatches = rowsByCopyPriority(normalSources, 'gacha_id', activeGatchId);
+          normalRowsToAppend = normalMatches.map(sourceRow => Object.fromEntries(
+            s0NormalParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+          ));
+          generatedS0NormalText = appendRowsToTsv(otherState.get('other:m_gacha_normal.tsv')?.text ?? '', s0NormalParsed.headers, normalRowsToAppend);
+        } else {
+          generatedS0NormalText = '';
+        }
 
         const productInfoSources = [
           {file:'m_gacha_product_info.tsv', parsed:parsedFiles.get('m_gacha_product_info.tsv')},
@@ -1134,7 +1140,7 @@
       );
 
       generatedS0Id = replacementId;
-      persistGeneratedOutputs(isNormal, isStepup);
+      persistGeneratedOutputs(isNormal, isStepup, isSelect);
       lastGenerationSnapshot = generationSnapshot;
       el('undoBtn').disabled = false;
       renderFinalOutputs();
@@ -1159,21 +1165,21 @@
       el('replacementIdInput').value = '';
       el('downloadResultsBtn').disabled = false;
       el('downloadAppealBtn').disabled = false;
-      el('downloadProductInfoBtn').hidden = !isNormal;
-      el('downloadProductInfoBtn').disabled = !isNormal;
+      el('downloadProductInfoBtn').hidden = !(isNormal || isSelect);
+      el('downloadProductInfoBtn').disabled = !(isNormal || isSelect);
       el('downloadNormalBtn').hidden = !isNormal;
       el('downloadNormalBtn').disabled = !isNormal;
       el('downloadLotBtn').hidden = !(isNormal || isStepup);
       el('downloadLotBtn').disabled = !(isNormal || isStepup);
-      el('downloadPrizeBtn').hidden = !(isNormal || isStepup);
-      el('downloadPrizeBtn').disabled = !(isNormal || isStepup);
+      el('downloadPrizeBtn').hidden = !(isNormal || isStepup || isSelect);
+      el('downloadPrizeBtn').disabled = !(isNormal || isStepup || isSelect);
       el('downloadStepupBtn').hidden = !isStepup;
       el('downloadStepupBtn').disabled = !isStepup;
       el('downloadStepupTextBtn').hidden = !isStepup;
       el('downloadStepupTextBtn').disabled = !isStepup;
       el('downloadStepupProductInfoBtn').hidden = !isStepup;
       el('downloadStepupProductInfoBtn').disabled = !isStepup;
-      const generatedFileCount = 3 + (isNormal ? 3 : 0) + (isStepup ? 4 : 0);
+      const generatedFileCount = 3 + (isNormal ? 3 : 0) + (isStepup ? 4 : 0) + (isSelect ? 1 : 0);
       showToast(`已生成 ${generatedFileCount} 个新的 S0 TSV 文件`);
     }
 
@@ -1201,14 +1207,16 @@
       });
     }
 
-    function persistGeneratedOutputs(isNormal, isStepup){
+    function persistGeneratedOutputs(isNormal, isStepup, isSelect=false){
       persistOutput('other:m_gacha.tsv', generatedS0Text);
       persistOutput('other:m_gacha_appeal_image.tsv', generatedS0AppealText);
       persistOutput('other:m_gacha_lot.tsv', generatedS0LotText);
       persistOutput('other:m_gacha_prize.tsv', generatedS0PrizeText);
+      if(isNormal || isSelect){
+        persistOutput('other:m_gacha_product_info.tsv', generatedS0ProductInfoText);
+      }
       if(isNormal){
         persistOutput('other:m_gacha_normal.tsv', generatedS0NormalText);
-        persistOutput('other:m_gacha_product_info.tsv', generatedS0ProductInfoText);
       }
       if(isStepup){
         persistOutput('other:m_gacha_stepup.tsv', generatedS0StepupText);
