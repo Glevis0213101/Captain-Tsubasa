@@ -244,6 +244,16 @@
     }
     .replace-panel[hidden] { display: none; }
     .replace-panel .btn { min-width: 104px; }
+    .replace-actions { display: flex; gap: 8px; align-items: stretch; }
+    .replace-actions .btn { flex: 1; }
+    .final-outputs {
+      margin-top: 18px; padding: 16px; border: 1px solid var(--rule);
+      border-left: 4px solid var(--teal); border-radius: var(--radius); background: #f8fbfa;
+    }
+    .final-outputs h3 { margin: 0 0 4px; font-size: 16px; }
+    .final-outputs p { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+    .final-output-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 8px; }
+    .final-output-grid .btn { width: 100%; text-align: left; }
     .result-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 12px; }
 
     .footer {
@@ -386,9 +396,14 @@
           <div class="replace-panel" id="replacePanel" hidden>
             <div class="field"><label for="replacementSource">复制来源</label><select id="replacementSource" aria-describedby="replacementSourceHint"></select><small id="replacementSourceHint">如果同一 ID 位于多个文件，请选择要复制的完整记录。</small></div>
             <div class="field"><label for="replacementIdInput">新的 gacha_id</label><input id="replacementIdInput" type="text" inputmode="numeric" autocomplete="off" placeholder="输入新的 gacha_id"><small>将复制所选来源行，只修改 ID，并追加到对应 S0 TSV 底部。</small></div>
-            <button class="btn primary" id="replaceIdBtn" type="button">替换并生成</button>
+            <div class="replace-actions"><button class="btn primary" id="replaceIdBtn" type="button">替换并生成</button><button class="btn" id="undoBtn" type="button" disabled>撤销</button></div>
           </div>
           <div class="result-actions"><button class="btn" id="downloadResultsBtn" type="button" disabled>下载新的 S0 m_gacha.tsv</button><button class="btn" id="downloadAppealBtn" type="button" disabled>下载新的 S0 m_gacha_appeal_image.tsv</button><button class="btn" id="downloadProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_product_info.tsv</button><button class="btn" id="downloadNormalBtn" type="button" hidden disabled>下载新的 S0 m_gacha_normal.tsv</button><button class="btn" id="downloadLotBtn" type="button" hidden disabled>下载新的 S0 m_gacha_lot.tsv</button><button class="btn" id="downloadPrizeBtn" type="button" hidden disabled>下载新的 S0 m_gacha_prize.tsv</button><button class="btn" id="downloadStepupBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup.tsv</button><button class="btn" id="downloadStepupTextBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_appeal_text.tsv</button><button class="btn" id="downloadStepupProductInfoBtn" type="button" hidden disabled>下载新的 S0 m_gacha_stepup_product_info.tsv</button></div>
+          <section class="final-outputs" id="finalOutputs" hidden aria-labelledby="finalOutputsTitle">
+            <h3 id="finalOutputsTitle">全部最终 S0 文件</h3>
+            <p>包含当前循环中已保存的全部 gacha ID 修改，可在完成所有操作后统一下载。</p>
+            <div class="final-output-grid" id="finalOutputGrid"></div>
+          </section>
         </div>
       </section>
     </main>
@@ -441,6 +456,18 @@
     let generatedS0StepupAppealText = '';
     let generatedS0StepupProductInfoText = '';
     let generatedS0Id = '';
+    let lastGenerationSnapshot = null;
+    const outputFiles = [
+      ['m_gacha.tsv','other:m_gacha.tsv'],
+      ['m_gacha_lot.tsv','other:m_gacha_lot.tsv'],
+      ['m_gacha_stepup.tsv','other:m_gacha_stepup.tsv'],
+      ['m_gacha_stepup_product_info.tsv','other:m_gacha_stepup_product_info.tsv'],
+      ['m_gacha_stepup_appeal_text.tsv','other:m_gacha_stepup_appeal_text.tsv'],
+      ['m_gacha_product_info.tsv','other:m_gacha_product_info.tsv'],
+      ['m_gacha_prize.tsv','other:m_gacha_prize.tsv'],
+      ['m_gacha_normal.tsv','other:m_gacha_normal.tsv'],
+      ['m_gacha_appeal_image.tsv','other:m_gacha_appeal_image.tsv']
+    ];
     const resultTextFields = new Set(['name','appeal_text','copyright_text','feature_players_warning','_note']);
     const resultLongFields = new Set(['banner_asset_name','banner_logo_asset_name','background_asset_name','logo_asset_name','appeal_asset_name','pre_banner_asset_name','pre_banner_logo_asset_name']);
     const resultNumberFields = new Set(['priority','rendition_id','is_use_new_layout','is_collabo_gacha']);
@@ -542,6 +569,11 @@
       const storageKey = req.storageKey || req.name;
       targetParsed.set(storageKey, info.parsed);
       targetState.set(storageKey, {file, info, text, exact:true});
+      if(req.stage === 'other'){
+        lastGenerationSnapshot = null;
+        el('undoBtn').disabled = true;
+        renderFinalOutputs();
+      }
       updateCard(req); updateProgress(); updateLookupState();
     }
 
@@ -564,6 +596,11 @@
       const targetState = req.stage === 'other' ? otherState : state;
       const targetParsed = req.stage === 'other' ? otherParsedFiles : parsedFiles;
       targetState.delete(storageKey); targetParsed.delete(storageKey);
+      if(req.stage === 'other'){
+        lastGenerationSnapshot = null;
+        el('undoBtn').disabled = true;
+        renderFinalOutputs();
+      }
       const input=document.querySelector(`[data-expected="${storageKey}"] input`); input.value='';
       updateCard(req); updateProgress(); updateLookupState(); clearLookupResults();
     }
@@ -675,6 +712,7 @@
       generatedS0StepupAppealText = '';
       generatedS0StepupProductInfoText = '';
       generatedS0Id = '';
+      el('undoBtn').disabled = !lastGenerationSnapshot;
       el('downloadResultsBtn').disabled = true;
       el('downloadAppealBtn').disabled = true;
       el('downloadProductInfoBtn').hidden = true;
@@ -860,6 +898,41 @@
       return groups.flat();
     }
 
+    function snapshotS0Outputs(){
+      return new Map(outputFiles.map(([, storageKey]) => [storageKey, {
+        state: otherState.has(storageKey) ? {...otherState.get(storageKey)} : null,
+        parsed: otherParsedFiles.has(storageKey) ? otherParsedFiles.get(storageKey) : null
+      }]));
+    }
+
+    function restoreS0Outputs(snapshot){
+      snapshot.forEach((value, storageKey) => {
+        if(value.state) otherState.set(storageKey, value.state); else otherState.delete(storageKey);
+        if(value.parsed) otherParsedFiles.set(storageKey, value.parsed); else otherParsedFiles.delete(storageKey);
+      });
+    }
+
+    function undoLastGeneration(){
+      if(!lastGenerationSnapshot){ showToast('没有可以撤销的修改'); return; }
+      restoreS0Outputs(lastGenerationSnapshot);
+      lastGenerationSnapshot = null;
+      el('undoBtn').disabled = true;
+      renderFinalOutputs();
+      clearLookupResults();
+      el('cardIdInput').value = '';
+      el('lookupReady').className = 'lookup-ready';
+      el('lookupReady').textContent = '已撤销上一次 gacha ID 修改，所有相关 S0 文件已回滚。';
+      showToast('已撤销上一次 gacha ID 修改');
+    }
+
+    function renderFinalOutputs(){
+      const available = outputFiles.filter(([, storageKey]) => otherState.get(storageKey)?.text);
+      el('finalOutputs').hidden = !available.length;
+      el('finalOutputGrid').innerHTML = available.map(([filename, storageKey]) =>
+        `<button class="btn" type="button" data-final-output="${escapeHtml(storageKey)}" data-filename="${escapeHtml(filename)}">${escapeHtml(filename)}</button>`
+      ).join('');
+    }
+
     function replaceGatchId(){
       const replacementId = el('replacementIdInput').value;
       if(!activeGatchId || !collectedRows.length){ showToast('请先查找有效的 gacha_id'); return; }
@@ -879,6 +952,7 @@
       const sourceIndex = Number(el('replacementSource').value);
       const selected = collectedRows[sourceIndex];
       if(!selected){ showToast('请选择要复制的来源记录'); return; }
+      const generationSnapshot = snapshotS0Outputs();
       const s0Parsed = otherParsedFiles.get('other:m_gacha.tsv');
       const masterSourceRows = activeCharacterType === 'reissue'
         ? collectedRows.filter(row => row.source_key === activePreferredSourceKey)
@@ -1042,6 +1116,9 @@
 
       generatedS0Id = replacementId;
       persistGeneratedOutputs(isNormal, isStepup);
+      lastGenerationSnapshot = generationSnapshot;
+      el('undoBtn').disabled = false;
+      renderFinalOutputs();
 
       const previewRow = {
         source_key:'s0-new',
@@ -1196,11 +1273,11 @@
     otherBatch.addEventListener('drop', e=>handleOtherBatch(e.dataTransfer.files));
     el('resetBtn').addEventListener('click',()=>{
       if((!state.size && !otherState.size) || confirm('清除日本版与S0 配置的全部文件？')){
-        state.clear(); parsedFiles.clear(); otherState.clear(); otherParsedFiles.clear(); japanConfirmed=false;
+        state.clear(); parsedFiles.clear(); otherState.clear(); otherParsedFiles.clear(); japanConfirmed=false; lastGenerationSnapshot=null;
         allRequirements.forEach(r=>{const key=r.storageKey||r.name;const i=document.querySelector(`[data-expected="${key}"] input`);i.value='';i.disabled=false;updateCard(r);});
         document.querySelectorAll('[data-stage="japan"] .remove').forEach(button => button.disabled=false);
         el('batchInput').disabled=false; el('batchDrop').classList.remove('stage-hidden'); el('japanStage').classList.remove('stage-hidden');
-        el('japanConfirmed').hidden=true; el('otherStage').hidden=true; el('lookupPanel').hidden=true;
+        el('japanConfirmed').hidden=true; el('otherStage').hidden=true; el('lookupPanel').hidden=true; el('finalOutputs').hidden=true; el('finalOutputGrid').innerHTML='';
         updateProgress();updateLookupState();clearLookupResults();showToast('已清除两组配置文件');
       }
     });
@@ -1210,6 +1287,13 @@
     el('cardIdInput').addEventListener('input', clearLookupResults);
     el('replacementIdInput').addEventListener('keydown', event => { if(event.key === 'Enter') replaceGatchId(); });
     el('replaceIdBtn').addEventListener('click', replaceGatchId);
+    el('undoBtn').addEventListener('click', undoLastGeneration);
+    el('finalOutputGrid').addEventListener('click', event => {
+      const button = event.target.closest('[data-final-output]');
+      if(!button) return;
+      const item = otherState.get(button.dataset.finalOutput);
+      downloadTsv(item?.text ?? '', button.dataset.filename, `已下载最终 ${button.dataset.filename}`);
+    });
     el('downloadResultsBtn').addEventListener('click', downloadCollectedTsv);
     el('downloadAppealBtn').addEventListener('click', downloadAppealTsv);
     el('downloadProductInfoBtn').addEventListener('click', downloadProductInfoTsv);
