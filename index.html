@@ -252,9 +252,14 @@
     }
     .final-outputs h3 { margin: 0 0 4px; font-size: 16px; }
     .final-outputs p { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
-    .final-output-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap: 8px; }
-    .final-output-grid .btn { width: 100%; text-align: left; }
-    .result-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+    .final-output-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 8px; }
+    .final-output-grid .btn, .result-actions .btn {
+      width: 100%; min-width: 0; height: auto; min-height: 48px; padding: 10px 14px;
+      white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35;
+      text-align: center;
+    }
+    .final-output-grid .btn { text-align: left; }
+    .result-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,245px),1fr)); gap: 10px; margin-top: 12px; }
 
     .footer {
       position: fixed; z-index: 5; left: 220px; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 20px;
@@ -262,7 +267,11 @@
     }
     .footer-note { color: var(--muted); font-size: 12px; }
     .actions { display: flex; gap: 10px; }
-    .btn { min-height: 42px; padding: 0 17px; border-radius: 4px; font-weight: 750; border: 1px solid var(--rule); background: white; color: var(--ink); }
+    .btn {
+      min-height: 42px; padding: 8px 17px; border-radius: 4px; font-weight: 750;
+      border: 1px solid var(--rule); background: white; color: var(--ink);
+      white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.3;
+    }
     .btn.primary { border-color: var(--cyan); background: var(--cyan); color: white; }
     .btn.primary:disabled { cursor: not-allowed; border-color: #aab6c4; background: #aab6c4; }
     .toast { position: fixed; z-index: 10; right: 22px; bottom: 88px; max-width: 380px; padding: 13px 16px; color: white; background: var(--ink); border-radius: 5px; box-shadow: var(--shadow); transform: translateY(12px); opacity: 0; pointer-events: none; transition: .18s; }
