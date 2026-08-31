@@ -278,6 +278,8 @@
     .final-outputs h3 { margin: 0 0 4px; font-size: 16px; }
     .final-outputs p { margin: 0 0 12px; color: var(--muted); font-size: 12px; }
     .final-output-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,220px),1fr)); gap: 8px; }
+    .final-output-actions { display: flex; justify-content: flex-end; margin: 0 0 12px; }
+    .final-output-actions .btn { min-width: 180px; }
     .final-output-grid .btn, .result-actions .btn {
       width: 100%; min-width: 0; height: auto; min-height: 48px; padding: 10px 14px;
       white-space: normal; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35;
@@ -440,6 +442,7 @@
           <section class="final-outputs" id="finalOutputs" hidden aria-labelledby="finalOutputsTitle">
             <h3 id="finalOutputsTitle">全部最终 S0 文件</h3>
             <p>包含当前循环中已保存的全部 gacha ID 修改，可在完成所有操作后统一下载。</p>
+            <div class="final-output-actions"><button class="btn primary" id="downloadAllFinalBtn" type="button">一键下载全部 9 个文件</button></div>
             <div class="final-output-grid" id="finalOutputGrid"></div>
           </section>
         </div>
@@ -968,6 +971,7 @@
     function renderFinalOutputs(){
       const available = outputFiles.filter(([, storageKey]) => otherState.get(storageKey)?.text);
       el('finalOutputs').hidden = !available.length;
+      el('downloadAllFinalBtn').disabled = available.length !== outputFiles.length;
       el('finalOutputGrid').innerHTML = available.map(([filename, storageKey]) =>
         `<button class="btn" type="button" data-final-output="${escapeHtml(storageKey)}" data-filename="${escapeHtml(filename)}">${escapeHtml(filename)}</button>`
       ).join('');
@@ -1122,8 +1126,20 @@
         ];
         stepupProductInfoMatches = rowsByCopyPriority(stepupProductInfoSources, 'gacha_id', activeGatchId);
         const s0StepupProductInfoParsed = otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv');
+        const existingProductIds = s0StepupProductInfoParsed.rows
+          .map(row => String(row.product_id ?? '').trim())
+          .filter(value => /^\d+$/.test(value))
+          .map(Number);
+        let nextProductId = existingProductIds.reduce((maximum, value) => Math.max(maximum, value), 0) + 1;
         const stepupProductInfoRowsToAppend = stepupProductInfoMatches.map(sourceRow => Object.fromEntries(
-          s0StepupProductInfoParsed.headers.map(header => [header, header === 'gacha_id' ? replacementId : (sourceRow[header] ?? '')])
+          s0StepupProductInfoParsed.headers.map(header => [
+            header,
+            header === 'gacha_id'
+              ? replacementId
+              : header === 'product_id'
+                ? String(nextProductId++)
+                : (sourceRow[header] ?? '')
+          ])
         ));
         generatedS0StepupProductInfoText = appendRowsToTsv(otherState.get('other:m_gacha_stepup_product_info.tsv')?.text ?? '', s0StepupProductInfoParsed.headers, stepupProductInfoRowsToAppend);
 
@@ -1263,15 +1279,37 @@
       }
     }
 
-    function downloadTsv(text, filename, successMessage){
-      if(!text){ showToast('请先点击“替换并生成”'); return; }
+    function triggerTsvDownload(text, filename){
       const blob = new Blob([text], {type:'text/tab-separated-values;charset=utf-8'});
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
-      document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function downloadTsv(text, filename, successMessage){
+      if(!text){ showToast('请先点击“替换并生成”'); return; }
+      triggerTsvDownload(text, filename);
       showToast(successMessage);
+    }
+
+    async function downloadAllFinalOutputs(){
+      const available = outputFiles.filter(([, storageKey]) => otherState.get(storageKey)?.text);
+      if(available.length !== outputFiles.length){
+        showToast(`请先载入全部 9 个 S0 文件；当前可下载 ${available.length} 个`);
+        return;
+      }
+      el('downloadAllFinalBtn').disabled = true;
+      for(const [filename, storageKey] of available){
+        triggerTsvDownload(otherState.get(storageKey).text, filename);
+        await new Promise(resolve => setTimeout(resolve, 180));
+      }
+      el('downloadAllFinalBtn').disabled = false;
+      showToast('已一键下载全部 9 个最终 S0 TSV 文件');
     }
 
     function downloadCollectedTsv(){
@@ -1354,6 +1392,7 @@
     el('replacementIdInput').addEventListener('keydown', event => { if(event.key === 'Enter') replaceGatchId(); });
     el('replaceIdBtn').addEventListener('click', replaceGatchId);
     el('undoBtn').addEventListener('click', undoLastGeneration);
+    el('downloadAllFinalBtn').addEventListener('click', downloadAllFinalOutputs);
     el('finalOutputGrid').addEventListener('click', event => {
       const button = event.target.closest('[data-final-output]');
       if(!button) return;
