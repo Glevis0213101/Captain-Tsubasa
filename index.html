@@ -1126,11 +1126,13 @@
         ];
         stepupProductInfoMatches = rowsByCopyPriority(stepupProductInfoSources, 'gacha_id', activeGatchId);
         const s0StepupProductInfoParsed = otherParsedFiles.get('other:m_gacha_stepup_product_info.tsv');
-        const existingProductIds = s0StepupProductInfoParsed.rows
-          .map(row => String(row.product_id ?? '').trim())
-          .filter(value => /^\d+$/.test(value))
-          .map(Number);
-        let nextProductId = existingProductIds.reduce((maximum, value) => Math.max(maximum, value), 0) + 1;
+        const previousProductRows = s0StepupProductInfoParsed.rows;
+        const lastProductId = String(previousProductRows.at(-1)?.product_id ?? '').trim();
+        if(previousProductRows.length && !/^\d+$/.test(lastProductId)){
+          showToast('S0 m_gacha_stepup_product_info.tsv 最后一行的 product_id 不是有效数字');
+          return;
+        }
+        let nextProductId = (lastProductId ? Number(lastProductId) : 0) + 1;
         const stepupProductInfoRowsToAppend = stepupProductInfoMatches.map(sourceRow => Object.fromEntries(
           s0StepupProductInfoParsed.headers.map(header => [
             header,
